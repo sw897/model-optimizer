@@ -1,0 +1,36 @@
+{
+  "name": "@project/model-lod",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic stage-2 LOD worker for model canonical scenes",
+  "type": "module",
+  "files": ["dist", "README.md", "schemas", "toolchain.lock.json"],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "model-lod-worker": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "postbuild": "chmod +x dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.5.0",
+    "@gltf-transform/extensions": "4.5.0",
+    "@gltf-transform/functions": "4.5.0",
+    "meshoptimizer": "1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3",
+    "vitest": "3.2.4"
+  }
+}
