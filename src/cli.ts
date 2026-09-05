@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { runWorker } from "./worker.js";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { CLIOptions } from "./types.js";
 
 const VERSION = "0.1.0";
@@ -136,7 +138,8 @@ function parseMaxLevel(value: string | boolean | undefined): number {
   return parsed;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
+if (fileURLToPath(import.meta.url) === invokedPath) {
   void main().then((code) => {
     process.exitCode = code;
   });
