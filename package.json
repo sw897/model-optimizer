@@ -1,8 +1,8 @@
 {
-  "name": "@project/model-lod",
-  "version": "0.1.1",
+  "name": "model-optimizer",
+  "version": "0.2.0",
   "private": true,
-  "description": "Deterministic stage-2 LOD worker for model canonical scenes",
+  "description": "Deterministic LOD and web-asset optimization workers for model scenes",
   "type": "module",
   "files": [
     "dist",
@@ -14,11 +14,12 @@
     "node": ">=20"
   },
   "bin": {
-    "model-lod-worker": "dist/cli.js"
+    "model-lod-worker": "dist/cli.js",
+    "model-opt-worker": "dist/opt-cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "chmod +x dist/cli.js",
+    "postbuild": "chmod +x dist/cli.js dist/opt-cli.js",
     "package": "npm run build && node scripts/package-release.mjs",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
@@ -31,8 +32,10 @@
     "@gltf-transform/core": "4.5.0",
     "@gltf-transform/extensions": "4.5.0",
     "@gltf-transform/functions": "4.5.0",
+    "basisu": "1.16.3",
     "draco3dgltf": "1.5.7",
-    "meshoptimizer": "1.2.0"
+    "meshoptimizer": "1.2.0",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

@@ -2,15 +2,23 @@
   "schema": "model-optimizer.lod-toolchain",
   "version": 1,
   "name": "meshoptimizer-gltf-transform",
-  "worker": "@project/model-lod",
-  "workerVersion": "0.1.1",
+  "worker": "model-optimizer",
+  "workerVersion": "0.2.0",
   "node": ">=20",
   "packages": {
     "@gltf-transform/core": "4.5.0",
     "@gltf-transform/extensions": "4.5.0",
     "@gltf-transform/functions": "4.5.0",
+    "basisu": "1.16.3",
     "draco3dgltf": "1.5.7",
-    "meshoptimizer": "1.2.0"
+    "meshoptimizer": "1.2.0",
+    "sharp": "0.35.4"
   },
-  "method": "meshopt-simplify"
+  "method": "meshopt-simplify",
+  "optimization": {
+    "profile": "web-v1",
+    "geometryCompression": "meshopt",
+    "textureCompression": "ktx2",
+    "textureEncoder": "basisu@1.16.3"
+  }
 }

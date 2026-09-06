@@ -6,8 +6,13 @@ export interface SceneManifest {
   prototypeManifest: string;
   instanceManifest: string;
   objectIndex: string;
+  reportPath?: string;
+  lodManifest?: string;
+  optimizationManifest?: string;
   pages: unknown[];
   lodLevels: number;
+  geometryCompression?: string;
+  textureCompression?: string;
   [key: string]: unknown;
 }
 
@@ -159,4 +164,71 @@ export interface WorkerState {
   toolchainHash: string;
   reports: PrototypeReport[];
   manifestEntries: LODManifestEntry[];
+}
+
+export interface OptimizationCLIOptions {
+  input: string;
+  output: string;
+  json: boolean;
+  verbose: boolean;
+  help: boolean;
+  version: boolean;
+}
+
+export interface OptimizationToolchain {
+  name: string;
+  version: string;
+  binarySha256: string;
+  basisuVersion: string;
+  basisuBinarySha256?: string;
+}
+
+export interface OptimizationAsset {
+  level: number;
+  path: string;
+  sourceSha256: string;
+  outputSha256: string;
+  sourceBytes: number;
+  outputBytes: number;
+  geometryCompression: "meshopt" | "none";
+  textureCompression: "ktx2" | "none";
+  textureCount: number;
+  compressedTextureCount: number;
+}
+
+export interface OptimizationManifestPrototype {
+  prototypeId: string;
+  assets: OptimizationAsset[];
+}
+
+export interface OptimizationManifest {
+  schema: "model-optimizer.optimization-manifest";
+  version: 1;
+  profile: "web-v1";
+  inputSceneHash: string;
+  inputPrototypeManifestHash: string;
+  geometryCompression: "meshopt" | "none";
+  textureCompression: "ktx2" | "none";
+  toolchain: OptimizationToolchain;
+  prototypes: OptimizationManifestPrototype[];
+}
+
+export interface OptimizationReportAsset extends OptimizationAsset {
+  prototypeId: string;
+}
+
+export interface OptimizationReport {
+  schema: "model-optimizer.optimization-report";
+  version: 1;
+  status: "succeeded" | "failed";
+  profile: "web-v1";
+  inputRoot: string;
+  outputRoot: string;
+  inputSceneHash: string;
+  outputSceneHash?: string;
+  toolchain: OptimizationToolchain;
+  startedAt: string;
+  finishedAt?: string;
+  assets: OptimizationReportAsset[];
+  errors?: string[];
 }

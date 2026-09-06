@@ -48,7 +48,7 @@ export function createIO(): NodeIO {
 let dracoDecoderPromise: Promise<unknown> | undefined;
 let dracoEncoderPromise: Promise<unknown> | undefined;
 
-async function createDecodeIO(): Promise<NodeIO> {
+export async function createDecodeIO(): Promise<NodeIO> {
   dracoDecoderPromise ??= draco3d.createDecoderModule();
   dracoEncoderPromise ??= draco3d.createEncoderModule();
   const [decoder, encoder] = await Promise.all([dracoDecoderPromise, dracoEncoderPromise, MeshoptEncoder.ready]);
@@ -83,7 +83,7 @@ export async function validateGLB(path: string, io?: NodeIO): Promise<void> {
   document.getRoot().dispose();
 }
 
-async function validateGLBBytes(bytes: Uint8Array, io: NodeIO, label: string): Promise<Document> {
+export async function validateGLBBytes(bytes: Uint8Array, io: NodeIO, label: string): Promise<Document> {
   if (bytes.byteLength < GLB_MAGIC.byteLength || !Buffer.from(bytes.subarray(0, 4)).equals(GLB_MAGIC)) {
     throw new Error(`file is not a GLB: ${label}`);
   }
@@ -310,7 +310,7 @@ function assertNoExternalResources(document: Document, path: string): void {
   if (externalResources.length > 0) {
     throw new LODQualityError(
       "external-resource",
-      `GLB ${path} references external resources (${externalResources.join(", ")}); embed them before running model-lod`,
+      `GLB ${path} references external resources (${externalResources.join(", ")}); embed them before running model-lod-worker`,
     );
   }
 }
@@ -417,6 +417,97 @@ function captureSemanticSnapshot(document: Document): string {
     })),
   };
   return stableJSONStringify(snapshot);
+}
+
+/**
+ * Captures the parts of a GLB that an optimization transform must preserve.
+ * Compression is intentionally excluded from this snapshot because it adds
+ * extensions, quantizes accessors and may move position precision into node
+ * transforms while leaving the rendered scene structure unchanged.
+ */
+export function captureOptimizationSnapshot(document: Document): string {
+  const root = document.getRoot();
+  const scenes = root.listScenes();
+  const nodes = root.listNodes();
+  const meshes = root.listMeshes();
+  const materials = root.listMaterials();
+  const textures = root.listTextures();
+  const cameras = root.listCameras();
+  const skins = root.listSkins();
+  const indexOf = <T>(items: T[], item: T | null): number => (item ? items.indexOf(item) : -1);
+  const textureIndex = (texture: ReturnType<typeof root.listTextures>[number] | null): number => indexOf(textures, texture);
+
+  return stableJSONStringify({
+    rootExtras: root.getExtras(),
+    defaultScene: indexOf(scenes, root.getDefaultScene()),
+    scenes: scenes.map((scene) => ({
+      name: scene.getName(),
+      extras: scene.getExtras(),
+      children: scene.listChildren().map((node) => indexOf(nodes, node)),
+    })),
+    nodes: nodes.map((node) => ({
+      name: node.getName(),
+      extras: node.getExtras(),
+      mesh: indexOf(meshes, node.getMesh()),
+      camera: indexOf(cameras, node.getCamera()),
+      skin: indexOf(skins, node.getSkin()),
+      children: node.listChildren().map((child) => indexOf(nodes, child)),
+    })),
+    meshes: meshes.map((mesh) => ({
+      name: mesh.getName(),
+      extras: mesh.getExtras(),
+      primitives: mesh.listPrimitives().map((primitive) => ({
+        mode: primitive.getMode(),
+        material: indexOf(materials, primitive.getMaterial()),
+        semantics: [...primitive.listSemantics()].sort(),
+        targets: primitive.listTargets().length,
+        extras: primitive.getExtras(),
+      })),
+    })),
+    materials: materials.map((material) => ({
+      name: material.getName(),
+      extras: material.getExtras(),
+      alphaMode: material.getAlphaMode(),
+      alphaCutoff: material.getAlphaCutoff(),
+      doubleSided: material.getDoubleSided(),
+      baseColorFactor: [...material.getBaseColorFactor()],
+      emissiveFactor: [...material.getEmissiveFactor()],
+      normalScale: material.getNormalScale(),
+      occlusionStrength: material.getOcclusionStrength(),
+      metallicFactor: material.getMetallicFactor(),
+      roughnessFactor: material.getRoughnessFactor(),
+      textures: {
+        baseColor: textureIndex(material.getBaseColorTexture()),
+        emissive: textureIndex(material.getEmissiveTexture()),
+        normal: textureIndex(material.getNormalTexture()),
+        occlusion: textureIndex(material.getOcclusionTexture()),
+        metallicRoughness: textureIndex(material.getMetallicRoughnessTexture()),
+      },
+    })),
+    textures: textures.map((texture) => ({ name: texture.getName(), extras: texture.getExtras() })),
+    skins: skins.map((skin) => ({
+      name: skin.getName(),
+      extras: skin.getExtras(),
+      skeleton: indexOf(nodes, skin.getSkeleton()),
+      joints: skin.listJoints().map((joint) => indexOf(nodes, joint)),
+      hasInverseBindMatrices: skin.getInverseBindMatrices() !== null,
+    })),
+    animations: root.listAnimations().map((animation) => ({
+      name: animation.getName(),
+      extras: animation.getExtras(),
+      channels: animation.listChannels().length,
+      samplers: animation.listSamplers().length,
+    })),
+  });
+}
+
+export function assertOptimizationSnapshot(expected: string, document: Document, label: string): void {
+  if (captureOptimizationSnapshot(document) !== expected) {
+    throw new LODQualityError(
+      "semantic-change",
+      `${label} changed scene structure (nodes, materials, textures, extras, primitive boundaries, or animation bindings)`,
+    );
+  }
 }
 
 function assertSemanticSnapshot(expected: string, document: Document, level: number): void {
