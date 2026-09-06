@@ -31,6 +31,11 @@ node dist/cli.js \
 and emits a manifest with no simplified levels. The default is level 1. Supported presets are
 `tower-v1`, `span-v1`, and `lod0-only`.
 
+`tower-v1` and `span-v1` use a scene-wide `lod0-only` fallback. If any prototype contains line/
+point primitives, is too small to reduce, exceeds the error limit, or changes scene semantics, the
+worker validates all canonical assets and publishes a LOD0-only stage instead of emitting an
+identity or partial LOD set. This keeps stage 3's requirement for continuous levels intact.
+
 If a run is interrupted after one or more prototypes finish, the worker retains an unpublishable
 `<output>.stage2-work` directory. Repeat the command with `--resume` to validate and reuse matching
 prototype hashes; omit `--resume` to discard that staging directory and start over.
@@ -63,9 +68,9 @@ The worker produces:
 ```
 
 `lod-manifest.json` uses `model-optimizer.lod-manifest` v1. Every generated level records the canonical input
-hash, output hash, method, tool version, and measured Meshopt error in meters. LOD files are written
-to temporary names, decoded again, hashed, and renamed atomically. The final directory is committed
-with a directory rename, so a failed run cannot expose a partial stage.
+hash, output hash, method, tool version, and measured Meshopt error in meters. LOD files are decoded
+before they are committed, hashed, and written atomically with an fsync. The final directory is
+committed with a directory rename, so a failed run cannot expose a partial stage.
 
 The JSON Schema for the hand-off is checked in at `schemas/lod-manifest.schema.json`.
 
@@ -75,13 +80,18 @@ The JSON Schema for the hand-off is checked in at `schemas/lod-manifest.schema.j
 - glTF-Transform handles document I/O and semantic preservation; MeshoptSimplifier handles triangle
   reduction.
 - Nodes, materials, textures, extras, primitive boundaries, transforms, skins, and animations are
-  retained by the document transform. Non-triangle primitives are not simplified.
+  retained by the document transform and checked by a semantic snapshot before publication.
+- Non-triangle primitives are rejected for a simplification preset and trigger the scene-wide
+  `lod0-only` fallback; they are never written as fake `meshopt-simplify` levels.
 - The worker locks topological borders and converts the preset meter error bound to Meshopt's
   normalized error scale.
-- A requested level must reduce triangle count. If it cannot, the worker fails instead of writing an
-  identity LOD that would hide a bad result.
-- The worker does not compress output with Draco, Meshopt, or KTX2. Compression remains a separate
-  validated publishing decision.
+- A requested level must reduce triangle count and remain within the preset error limit. If it
+  cannot, the fallback policy is applied instead of writing an identity LOD.
+- Canonical GLBs must embed image resources. External image URIs are rejected because the worker
+  copies the canonical GLB as LOD0 and cannot safely publish an unresolved sidecar.
+- The worker decodes Draco and Meshopt input with the locked toolchain. Existing Draco or Meshopt
+  input is re-encoded when the simplified GLB is written; the worker does not apply a new Meshopt
+  or KTX2 compression transform. Compression remains a separate validated publishing decision.
 
 this project owns simplification, preset/toolchain versions, and LOD quality reports.
 

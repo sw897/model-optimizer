@@ -17,13 +17,13 @@ const PRESETS: Readonly<Record<string, Preset>> = {
     name: "tower-v1",
     version: 1,
     levels: TOWER_LEVELS,
-    fallback: "fail",
+    fallback: "lod0-only",
   },
   "span-v1": {
     name: "span-v1",
     version: 1,
     levels: SPAN_LEVELS,
-    fallback: "fail",
+    fallback: "lod0-only",
   },
   "lod0-only": {
     name: "lod0-only",

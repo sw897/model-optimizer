@@ -1,10 +1,15 @@
 {
   "name": "@project/model-lod",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Deterministic stage-2 LOD worker for model canonical scenes",
   "type": "module",
-  "files": ["dist", "README.md", "schemas", "toolchain.lock.json"],
+  "files": [
+    "dist",
+    "README.md",
+    "schemas",
+    "toolchain.lock.json"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -26,6 +31,7 @@
     "@gltf-transform/core": "4.5.0",
     "@gltf-transform/extensions": "4.5.0",
     "@gltf-transform/functions": "4.5.0",
+    "draco3dgltf": "1.5.7",
     "meshoptimizer": "1.2.0"
   },
   "devDependencies": {

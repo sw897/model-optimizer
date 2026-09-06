@@ -7,6 +7,7 @@ import {
   hashDirectory,
   pathExists,
   readJSON,
+  resolveExistingSafe,
   resolveSafe,
   safeRelativePath,
   sha256File,
@@ -33,9 +34,9 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
     throw new Error(`input scene hash mismatch: manifest=${scene.sceneHash} actual=${computedSceneHash}`);
   }
 
-  const prototypesPath = resolve(root, scene.prototypeManifest || "prototypes.json");
+  const prototypesPath = await resolveExistingSafe(root, scene.prototypeManifest || "prototypes.json");
   const prototypes = await readJSON<PrototypeManifestEntry[]>(prototypesPath);
-  validatePrototypes(root, prototypes);
+  await validatePrototypes(root, prototypes);
 
   const prototypeManifestHash = await sha256File(prototypesPath);
   const toolchainLockPath = fileURLToPath(new URL("../toolchain.lock.json", import.meta.url));
@@ -89,6 +90,7 @@ export async function copyCanonicalScene(snapshot: InputSnapshot, outputRoot: st
 
 async function copyReferencedFile(inputRoot: string, outputRoot: string, candidate: string): Promise<void> {
   const relativePath = safeRelativePath(inputRoot, candidate);
+  await resolveExistingSafe(inputRoot, relativePath);
   const source = resolve(inputRoot, relativePath);
   const info = await stat(source);
   if (!info.isFile()) throw new Error(`referenced asset is not a file: ${candidate}`);
@@ -115,7 +117,7 @@ function validateSceneManifest(scene: SceneManifest): void {
   if (!Array.isArray(scene.pages)) throw new Error("input scene.json pages must be an array");
 }
 
-function validatePrototypes(root: string, prototypes: PrototypeManifestEntry[]): void {
+async function validatePrototypes(root: string, prototypes: PrototypeManifestEntry[]): Promise<void> {
   if (!Array.isArray(prototypes) || prototypes.length === 0) {
     throw new Error("input prototypes.json must contain at least one prototype");
   }
@@ -127,7 +129,7 @@ function validatePrototypes(root: string, prototypes: PrototypeManifestEntry[]):
     }
     seen.add(prototype.prototypeId);
     if (!prototype.canonicalGLB) throw new Error(`prototype ${prototype.prototypeId} has no canonicalGLB`);
-    const canonicalPath = resolveSafe(root, prototype.canonicalGLB);
+    const canonicalPath = await resolveExistingSafe(root, prototype.canonicalGLB);
     if (!prototype.canonicalGLB.toLowerCase().endsWith(".glb")) {
       throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be a .glb file`);
     }

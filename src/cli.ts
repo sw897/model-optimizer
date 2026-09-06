@@ -5,7 +5,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CLIOptions } from "./types.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 export function parseCLI(argv: string[]): CLIOptions {
   const values: Record<string, string | boolean | undefined> = {};

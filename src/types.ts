@@ -85,6 +85,7 @@ export interface PrototypeStats {
   triangleCount: number;
   vertexCount: number;
   unsupportedPrimitives: number;
+  unsupportedModes: number[];
 }
 
 export interface LevelReport {

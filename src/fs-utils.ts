@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, copyFile, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { access, copyFile, cp, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { constants as fsConstants, existsSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export async function sha256File(path: string): Promise<string> {
   const hash = createHash("sha256");
@@ -66,8 +66,19 @@ export async function writeJSONAtomic(path: string, value: unknown): Promise<voi
 export async function writeAtomic(path: string, data: Uint8Array | string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(temporary, data);
-  await rename(temporary, path);
+  try {
+    const handle = await open(temporary, "w");
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function pathExists(path: string): Promise<boolean> {
@@ -121,13 +132,38 @@ export function resolveSafe(root: string, candidate: string): string {
   return resolve(root, safeRelativePath(root, candidate));
 }
 
+export async function resolveExistingSafe(root: string, candidate: string): Promise<string> {
+  const logicalPath = resolveSafe(root, candidate);
+  const [realRoot, realPath] = await Promise.all([realpath(resolve(root)), realpath(logicalPath)]);
+  const rel = relative(realRoot, realPath);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`asset path escapes scene root through a symlink: ${candidate}`);
+  }
+  return logicalPath;
+}
+
 export function assertDifferentRoots(input: string, output: string): void {
-  const inputRoot = resolve(input);
-  const outputRoot = resolve(output);
+  const inputRoot = realpathForComparison(input);
+  const outputRoot = realpathForComparison(output);
   const rel = relative(inputRoot, outputRoot);
   if (rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))) {
     throw new Error("output directory must be outside input directory");
   }
+}
+
+function realpathForComparison(path: string): string {
+  const original = resolve(path);
+  let current = original;
+  const missing: string[] = [];
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) return original;
+    missing.push(basename(current));
+    current = parent;
+  }
+  let resolved = realpathSync(current);
+  for (const segment of missing.reverse()) resolved = join(resolved, segment);
+  return resolved;
 }
 
 export async function createTemporarySibling(outputRoot: string): Promise<string> {
@@ -140,6 +176,23 @@ export async function createTemporarySibling(outputRoot: string): Promise<string
 export async function commitDirectory(temporary: string, outputRoot: string): Promise<void> {
   await mkdir(dirname(outputRoot), { recursive: true });
   await rename(temporary, outputRoot);
+  await syncDirectory(dirname(outputRoot));
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  // Directory fsync is supported on POSIX filesystems. Some platforms reject
+  // opening a directory for syncing; the rename is still atomic there.
+  try {
+    const handle = await open(path, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Best effort only: durability must not turn a successful atomic commit
+    // into a failed build on platforms without directory fsync support.
+  }
 }
 
 export async function readFirstBytes(path: string, length: number): Promise<Buffer> {
