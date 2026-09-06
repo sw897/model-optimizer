@@ -58,7 +58,7 @@ describe("model-lod worker", () => {
     expect(manifest.prototypes[0]?.lods[0]?.level).toBe(1);
     expect(manifest.prototypes[0]?.lods[0]?.method).toBe("meshopt-simplify");
     expect(manifest.prototypes[0]?.lods[0]?.sha256).toHaveLength(64);
-    expect(await readFile(join(output, "prototypes", "prototype-000001", "lod1.glb"))).toHaveLength(
+    expect(await readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toHaveLength(
       report.prototypes[0]?.lods[0]?.outputBytes ?? 0,
     );
     expect(await readFile(join(input, "scene.json"), "utf8")).toContain('"buildStage":"canonical"');
@@ -75,8 +75,8 @@ describe("model-lod worker", () => {
       version: false,
     });
     temporaryRoots.push(outputRepeat);
-    expect(await readFile(join(outputRepeat, "prototypes", "prototype-000001", "lod1.glb"))).toEqual(
-      await readFile(join(output, "prototypes", "prototype-000001", "lod1.glb")),
+    expect(await readFile(join(outputRepeat, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toEqual(
+      await readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb")),
     );
     expect(await readFile(join(outputRepeat, "lod-manifest.json"))).toEqual(
       await readFile(join(output, "lod-manifest.json")),
@@ -99,7 +99,7 @@ describe("model-lod worker", () => {
     });
     temporaryRoots.push(input, output);
     expect(report.prototypes[0]?.status).toBe("lod0-only");
-    await expect(readFile(join(output, "prototypes", "prototype-000001", "lod1.glb"))).rejects.toThrow();
+    await expect(readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
     const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8")) as {
       prototypes: Array<{ lods: unknown[] }>;
     };
@@ -129,7 +129,7 @@ describe("model-lod worker", () => {
       prototypes: Array<{ lods: unknown[] }>;
     };
     expect(manifest.prototypes[0]?.lods).toHaveLength(0);
-    await expect(readFile(join(output, "prototypes", "prototype-000001", "lod1.glb"))).rejects.toThrow();
+    await expect(readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
 
     const tinyInput = await createCanonicalFixture("triangle");
     const tinyOutput = join(tinyInput, "..", "stage2-tiny-fallback");
@@ -288,7 +288,7 @@ describe("model-lod worker", () => {
 
 async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "grid"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "model-lod-fixture-"));
-  const prototypeRoot = join(root, "prototypes", "prototype-000001");
+  const prototypeRoot = join(root, "assets", "prototypes", "scene-relative", "fixture");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(prototypeRoot, { recursive: true });
 
@@ -366,16 +366,23 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
     JSON.stringify([
       {
         prototypeId: "prototype-000001",
-        prototypeKey: "fixture",
+        prototypeKey: "obj:fixture.obj",
+        name: "fixture",
+        assetKey: "scene-relative/fixture",
+        assetPath: "assets/prototypes/scene-relative/fixture",
         sourcePath: "fixture.obj",
-        role: "prototype-local",
-        canonicalGLB: "prototypes/prototype-000001/lod0.glb",
-        lods: [{ level: 0, path: "prototypes/prototype-000001/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
+        role: "scene-relative",
+        canonicalGLB: "assets/prototypes/scene-relative/fixture/lod0.glb",
+        lods: [{ level: 0, path: "assets/prototypes/scene-relative/fixture/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
       },
     ]),
   );
   await writeFile(join(root, "instances.jsonl"), "");
   await writeFile(join(root, "object-index.json"), "[]\n");
+  await writeFile(
+    join(root, "component-graph.json"),
+    JSON.stringify({ schema: "model-optimizer.model-component-graph", version: 1, prototypes: [], unreferenced: [] }),
+  );
   const scene = JSON.parse(await readFile(join(root, "scene.json"), "utf8")) as Record<string, unknown>;
   scene.sceneHash = await hashDirectory(root, ["scene.json", "build-report.json", "merge-report.json", "source-manifest.json"]);
   await writeFile(join(root, "scene.json"), JSON.stringify(scene));

@@ -78,14 +78,20 @@ The worker produces:
   prototypes.json             # unchanged canonical prototype index
   instances.jsonl
   object-index.json
+  component-graph.json       # semantic component/audit graph
   pages/
-  prototypes/<id>/lod0.glb    # canonical asset
-  prototypes/<id>/lod1.glb
-  prototypes/<id>/lod2.glb
+  assets/prototypes/<assetKey>/lod0.glb    # canonical asset, semantic source path
+  assets/prototypes/<assetKey>/lod1.glb
+  assets/prototypes/<assetKey>/lod2.glb
   lod-manifest.json           # worker/model hand-off
   toolchain.lock.json
   lod-worker-report.json
 ```
+
+`prototypes.json` is the join index, not the physical directory name. Each entry carries
+`prototypeId` for instance references plus `name`, `role`, `sourcePath`, `assetKey` and
+`assetPath`. The canonical and generated assets always live at
+`<assetPath>/lod{level}.glb`; the numeric prototype id is never used as an asset directory.
 
 `lod-manifest.json` uses `model-optimizer.lod-manifest` v1. Every generated level records the canonical input
 hash, output hash, method, tool version, and measured Meshopt error in meters. LOD files are decoded

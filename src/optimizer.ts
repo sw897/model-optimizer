@@ -393,7 +393,17 @@ async function loadOptimizationSnapshot(root: string): Promise<OptimizationSnaps
   for (const prototype of prototypes) {
     if (!prototype.prototypeId || seen.has(prototype.prototypeId)) throw new Error(`duplicate or empty prototype id ${prototype.prototypeId || "<empty>"}`);
     seen.add(prototype.prototypeId);
+    if (!prototype.name || !prototype.assetKey || !prototype.assetPath || !prototype.sourcePath || !prototype.role) {
+      throw new Error(`prototype ${prototype.prototypeId} must contain name, assetKey, assetPath, sourcePath and role`);
+    }
+    const expectedAssetPath = `assets/prototypes/${prototype.assetKey}`;
+    if (prototype.assetPath !== expectedAssetPath) {
+      throw new Error(`prototype ${prototype.prototypeId} assetPath must be ${expectedAssetPath}`);
+    }
     const canonicalPath = normalizeRelativePath(prototype.canonicalGLB);
+    if (canonicalPath !== `${prototype.assetPath}/lod0.glb`) {
+      throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be ${prototype.assetPath}/lod0.glb`);
+    }
     await requireGLB(absoluteRoot, canonicalPath, `prototype ${prototype.prototypeId} canonicalGLB`);
     if (!Array.isArray(prototype.lods)) throw new Error(`prototype ${prototype.prototypeId} must declare a lods array`);
     const lods = prototype.lods;
@@ -413,9 +423,14 @@ async function loadOptimizationSnapshot(root: string): Promise<OptimizationSnaps
       if (!Number.isFinite(lod.geometricErrorMeters) || lod.geometricErrorMeters < 0) {
         throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} has invalid geometric error`);
       }
-      await requireGLB(absoluteRoot, normalizeRelativePath(lod.path), `prototype ${prototype.prototypeId} LOD${lod.level}`);
+      const lodPath = normalizeRelativePath(lod.path);
+      const expectedLODPath = `${prototype.assetPath}/lod${lod.level}.glb`;
+      if (lodPath !== expectedLODPath) {
+        throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} path must be ${expectedLODPath}`);
+      }
+      await requireGLB(absoluteRoot, lodPath, `prototype ${prototype.prototypeId} LOD${lod.level}`);
       if (lod.sha256) {
-        const actual = await sha256File(resolve(absoluteRoot, normalizeRelativePath(lod.path)));
+        const actual = await sha256File(resolve(absoluteRoot, lodPath));
         if (actual !== lod.sha256) throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} hash mismatch`);
       }
       if (lod.inputSha256 && lod.inputSha256 !== canonicalHash) {

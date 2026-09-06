@@ -23,7 +23,14 @@ export async function hashDirectory(root: string, excluded: string[] = []): Prom
   const excludedSet = new Set(excluded.map((entry) => entry.replaceAll("\\", "/")));
   const files: string[] = [];
   await collectFiles(resolve(root), files);
-  files.sort((left, right) => toSlash(relative(resolve(root), left)).localeCompare(toSlash(relative(resolve(root), right))));
+  files.sort((left, right) => {
+    const leftRelative = toSlash(relative(resolve(root), left));
+    const rightRelative = toSlash(relative(resolve(root), right));
+    // Go's scene builder orders UTF-8 path bytes with strings.Compare. Buffer
+    // comparison keeps the worker hash identical for non-ASCII source names
+    // as well as for the ASCII semantic paths used by the model fixtures.
+    return Buffer.compare(Buffer.from(leftRelative), Buffer.from(rightRelative));
+  });
   const hash = createHash("sha256");
   for (const file of files) {
     const relativePath = toSlash(relative(resolve(root), file));

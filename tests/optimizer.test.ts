@@ -1,5 +1,5 @@
 import { Accessor, Document, Primitive } from "@gltf-transform/core";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -60,7 +60,10 @@ describe("model-opt worker", () => {
     expect(prototypes[0]?.contentSha256).toHaveLength(64);
     expect(prototypes[0]?.lods[0]?.sha256).toBe(prototypes[0]?.contentSha256);
     expect(prototypes[0]?.lods[0]?.inputSha256).toBe(prototypes[0]?.contentSha256);
-    const optimizedDocument = await readGLB(join(output, "prototypes", "prototype-000001", "lod0.glb"));
+    expect(JSON.parse(await readFile(join(output, "component-graph.json"), "utf8"))).toMatchObject({
+      unreferenced: ["modelLib/insulator/spare.obj"],
+    });
+    const optimizedDocument = await readGLB(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod0.glb"));
     expect(optimizedDocument.hasExtension("EXT_meshopt_compression")).toBe(true);
     expect(optimizedDocument.hasExtension("KHR_texture_basisu")).toBe(true);
     optimizedDocument.getRoot().dispose();
@@ -79,10 +82,14 @@ describe("model-opt worker", () => {
     }>;
     prototypes[0]?.lods.push({
       level: 1,
-      path: "prototypes/prototype-000001/lod0.glb",
+      path: "assets/prototypes/scene-relative/fixture/lod1.glb",
       geometricErrorMeters: 1,
       method: "meshopt-simplify",
     });
+    await copyFile(
+      join(input, "assets", "prototypes", "scene-relative", "fixture", "lod0.glb"),
+      join(input, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"),
+    );
     await writeFile(prototypesPath, `${JSON.stringify(prototypes)}\n`);
 
     const scenePath = join(input, "scene.json");
@@ -97,7 +104,7 @@ describe("model-opt worker", () => {
 
 async function createPublishedFixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "model-optimizer-fixture-"));
-  const prototypeRoot = join(root, "prototypes", "prototype-000001");
+  const prototypeRoot = join(root, "assets", "prototypes", "scene-relative", "fixture");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(prototypeRoot, { recursive: true });
 
@@ -124,13 +131,27 @@ async function createPublishedFixture(): Promise<string> {
   await writeFile(join(root, "instances.jsonl"), "");
   await writeFile(join(root, "object-index.json"), "[]\n");
   await writeFile(
+    join(root, "component-graph.json"),
+    JSON.stringify({
+      schema: "model-optimizer.model-component-graph",
+      version: 1,
+      prototypes: [],
+      unreferenced: ["modelLib/insulator/spare.obj"],
+    }),
+  );
+  await writeFile(
     join(root, "prototypes.json"),
     JSON.stringify([
       {
         prototypeId: "prototype-000001",
-        prototypeKey: "fixture",
-        canonicalGLB: "prototypes/prototype-000001/lod0.glb",
-        lods: [{ level: 0, path: "prototypes/prototype-000001/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
+        prototypeKey: "obj:fixture.obj",
+        name: "fixture",
+        assetKey: "scene-relative/fixture",
+        assetPath: "assets/prototypes/scene-relative/fixture",
+        sourcePath: "fixture.obj",
+        role: "scene-relative",
+        canonicalGLB: "assets/prototypes/scene-relative/fixture/lod0.glb",
+        lods: [{ level: 0, path: "assets/prototypes/scene-relative/fixture/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
       },
     ]),
   );

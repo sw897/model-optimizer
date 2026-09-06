@@ -31,8 +31,11 @@ export interface PrototypeLOD {
 export interface PrototypeManifestEntry {
   prototypeId: string;
   prototypeKey?: string;
-  sourcePath?: string;
-  role?: string;
+  name: string;
+  assetKey: string;
+  assetPath: string;
+  sourcePath: string;
+  role: string;
   canonicalGLB: string;
   lods: PrototypeLOD[];
   [key: string]: unknown;

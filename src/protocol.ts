@@ -14,7 +14,14 @@ import {
 } from "./fs-utils.js";
 import type { InputSnapshot, PrototypeManifestEntry, SceneManifest } from "./types.js";
 
-const REQUIRED_FILES = ["scene.json", "source-manifest.json", "prototypes.json", "instances.jsonl", "object-index.json"];
+const REQUIRED_FILES = [
+  "scene.json",
+  "source-manifest.json",
+  "prototypes.json",
+  "instances.jsonl",
+  "object-index.json",
+  "component-graph.json",
+];
 
 export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapshot> {
   const root = resolve(inputRoot);
@@ -59,6 +66,7 @@ export async function copyCanonicalScene(snapshot: InputSnapshot, outputRoot: st
     "source-manifest.json",
     "instances.jsonl",
     "object-index.json",
+    "component-graph.json",
     snapshot.scene.prototypeManifest || "prototypes.json",
   ]);
   for (const relativePath of files) {
@@ -66,7 +74,7 @@ export async function copyCanonicalScene(snapshot: InputSnapshot, outputRoot: st
     await copyFileChecked(source, resolveSafe(outputRoot, relativePath));
   }
 
-  for (const directory of ["prototypes", "pages", "objects"]) {
+  for (const directory of ["assets", "pages", "objects"]) {
     const source = resolve(inputRoot, directory);
     if (await pathExists(source)) await copyTree(source, resolve(outputRoot, directory));
   }
@@ -128,13 +136,31 @@ async function validatePrototypes(root: string, prototypes: PrototypeManifestEnt
       throw new Error(`input prototypes.json contains duplicate or empty prototype id: ${prototype.prototypeId || "<empty>"}`);
     }
     seen.add(prototype.prototypeId);
-    if (!prototype.canonicalGLB) throw new Error(`prototype ${prototype.prototypeId} has no canonicalGLB`);
+    if (!prototype.name || !prototype.assetKey || !prototype.assetPath || !prototype.sourcePath || !prototype.role) {
+      throw new Error(`prototype ${prototype.prototypeId} must contain name, assetKey, assetPath, sourcePath and role`);
+    }
+    const expectedAssetPath = `assets/prototypes/${prototype.assetKey}`;
+    if (prototype.assetPath !== expectedAssetPath) {
+      throw new Error(`prototype ${prototype.prototypeId} assetPath must be ${expectedAssetPath}`);
+    }
+    if (prototype.canonicalGLB !== `${prototype.assetPath}/lod0.glb`) {
+      throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be ${prototype.assetPath}/lod0.glb`);
+    }
     const canonicalPath = await resolveExistingSafe(root, prototype.canonicalGLB);
     if (!prototype.canonicalGLB.toLowerCase().endsWith(".glb")) {
       throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be a .glb file`);
     }
-    if (!prototype.lods?.some((lod) => lod.level === 0 && lod.path === prototype.canonicalGLB)) {
+    if (!Array.isArray(prototype.lods) || prototype.lods.length === 0) {
+      throw new Error(`prototype ${prototype.prototypeId} must declare a lods array`);
+    }
+    if (!prototype.lods.some((lod) => lod.level === 0 && lod.path === prototype.canonicalGLB)) {
       throw new Error(`prototype ${prototype.prototypeId} must declare canonicalGLB as LOD0`);
+    }
+    for (const lod of prototype.lods) {
+      const expectedLODPath = `${prototype.assetPath}/lod${lod.level}.glb`;
+      if (lod.path !== expectedLODPath) {
+        throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} path must be ${expectedLODPath}`);
+      }
     }
     void canonicalPath;
   }

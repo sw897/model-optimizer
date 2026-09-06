@@ -146,7 +146,7 @@ export async function simplifyGLB(
       const candidate = await readGLB(inputPath, io);
       try {
         const normalizedError = level.maxErrorMeters / geometricScale;
-        const measuredError = await estimateError(candidate, level, normalizedError);
+        let measuredError = await estimateError(candidate, level, normalizedError);
         await candidate.transform(
           simplify({
             simplifier: MeshoptSimplifier,
@@ -155,7 +155,18 @@ export async function simplifyGLB(
             lockBorder: level.lockBorder,
           }),
         );
-        const outputStats = inspectDocument(candidate);
+        let outputStats = inspectDocument(candidate);
+        if (sourceStats.triangleCount > 0 && outputStats.triangleCount >= sourceStats.triangleCount) {
+          const sloppy = simplifySloppyFallback(candidate, level, normalizedError);
+          if (!sloppy.reduced) {
+            throw new LODQualityError(
+              "no-reduction",
+              `LOD${level.level} did not reduce triangles (${sourceStats.triangleCount} -> ${outputStats.triangleCount})`,
+            );
+          }
+          measuredError = Math.max(measuredError, sloppy.geometricErrorMeters);
+          outputStats = inspectDocument(candidate);
+        }
         assertSemanticSnapshot(sourceSemantics, candidate, level.level);
         if (sourceStats.triangleCount > 0 && outputStats.triangleCount >= sourceStats.triangleCount) {
           throw new LODQualityError(
@@ -206,6 +217,47 @@ export async function simplifyGLB(
   }
 
   return { sourceBytes, sourceHash, sourceStats, levels: reports };
+}
+
+interface SloppyFallbackResult {
+  reduced: boolean;
+  geometricErrorMeters: number;
+}
+
+/**
+ * Meshopt's topology-preserving simplifier can reject meshes whose UV/normal
+ * seams leave every candidate edge on a border.  simplifySloppy still uses
+ * Meshopt's error metric, but permits those edges to collapse.  We only use
+ * it after the regular simplifier produced no reduction and keep the original
+ * vertex streams so the scene semantic snapshot remains unchanged.
+ */
+function simplifySloppyFallback(document: Document, level: PresetLevel, normalizedError: number): SloppyFallbackResult {
+  let reduced = false;
+  let maximumError = 0;
+  for (const mesh of document.getRoot().listMeshes()) {
+    for (const primitive of mesh.listPrimitives()) {
+      if (primitive.getMode() !== Primitive.Mode.TRIANGLES) continue;
+      const position = primitive.getAttribute("POSITION");
+      const indices = primitive.getIndices();
+      if (!position || !indices) continue;
+      const indexArray = toUint32(indices.getArray());
+      const targetCount = Math.floor((level.ratio * indexArray.length) / 3) * 3;
+      if (targetCount >= indexArray.length || targetCount < 3) continue;
+      const [simplified, error] = MeshoptSimplifier.simplifySloppy(
+        indexArray,
+        position.getArray(),
+        3,
+        null,
+        targetCount,
+        normalizedError,
+      );
+      if (simplified.length >= indexArray.length) continue;
+      indices.setArray(simplified);
+      reduced = true;
+      maximumError = Math.max(maximumError, error * MeshoptSimplifier.getScale(position.getArray(), 3));
+    }
+  }
+  return { reduced, geometricErrorMeters: maximumError };
 }
 
 export async function inspectGLB(path: string): Promise<PrototypeStats> {
