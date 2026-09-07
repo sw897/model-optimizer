@@ -36,20 +36,20 @@ export interface PrototypeManifestEntry {
   assetPath: string;
   sourcePath: string;
   role: string;
-  canonicalGLB: string;
+	baseGLB: string;
   lods: PrototypeLOD[];
   [key: string]: unknown;
 }
 
 export interface LODManifestEntry {
   prototypeId: string;
-  canonicalSha256: string;
+	baseSha256: string;
   lods: PrototypeLOD[];
 }
 
 export interface LODManifest {
   schema: "model-optimizer.lod-manifest";
-  version: 1;
+  version: 2;
   baseSceneHash: string;
   basePrototypeManifestHash: string;
   toolchain: {
@@ -71,7 +71,7 @@ export interface Preset {
   name: string;
   version: number;
   levels: PresetLevel[];
-  fallback: "lod0-only" | "fail";
+	fallback: "base-only" | "fail";
 }
 
 export interface CLIOptions {
@@ -119,18 +119,18 @@ export interface LevelReport {
 
 export interface PrototypeReport {
   prototypeId: string;
-  canonicalGLB: string;
-  canonicalSha256: string;
-  canonicalBytes: number;
+	baseGLB: string;
+	baseSha256: string;
+	baseBytes: number;
   stats: PrototypeStats;
   lods: LevelReport[];
-  status: "succeeded" | "lod0-only" | "failed";
+	status: "succeeded" | "base-only" | "failed";
   reason?: string;
 }
 
 export interface WorkerReport {
   schema: "model-optimizer.lod-worker-report";
-  version: 1;
+  version: 2;
   status: "succeeded" | "failed";
   inputRoot: string;
   outputRoot: string;
@@ -157,7 +157,7 @@ export interface InputSnapshot {
 
 export interface WorkerState {
   schema: "model-optimizer.lod-worker-state";
-  version: 1;
+  version: 2;
   jobKey: string;
   baseSceneHash: string;
   basePrototypeManifestHash: string;
@@ -206,7 +206,7 @@ export interface OptimizationManifestPrototype {
 
 export interface OptimizationManifest {
   schema: "model-optimizer.optimization-manifest";
-  version: 1;
+  version: 2;
   profile: "web-v1";
   inputSceneHash: string;
   inputPrototypeManifestHash: string;
@@ -222,7 +222,7 @@ export interface OptimizationReportAsset extends OptimizationAsset {
 
 export interface OptimizationReport {
   schema: "model-optimizer.optimization-report";
-  version: 1;
+  version: 2;
   status: "succeeded" | "failed";
   profile: "web-v1";
   inputRoot: string;

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/schemas/model-optimizer.optimization-manifest.v1.json",
+  "$id": "https://example.invalid/schemas/model-optimizer.optimization-manifest.v2.json",
   "title": "model input model web optimization manifest",
   "type": "object",
   "additionalProperties": false,
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema": { "const": "model-optimizer.optimization-manifest" },
-    "version": { "const": 1 },
+    "version": { "const": 2 },
     "profile": { "const": "web-v1" },
     "inputSceneHash": { "$ref": "#/$defs/sha256" },
     "inputPrototypeManifestHash": { "$ref": "#/$defs/sha256" },

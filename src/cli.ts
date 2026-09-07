@@ -80,8 +80,8 @@ Usage:
 Options:
   -i, --input <path>       Stage-1 canonical scene root (required)
   -o, --output <path>      Empty stage-2 output root (required)
-      --preset <name>      tower-v1, span-v1, or lod0-only (default: tower-v1)
-      --max-level <N>      Highest LOD level to generate (default: 1; 0 copies/validates LOD0)
+      --preset <name>      tower-v1, span-v1, or base-only (default: tower-v1)
+      --max-level <N>      Highest LOD level to generate (default: 1; 0 validates the base scene)
       --report <path>      Report path relative to output root (default: lod-worker-report.json)
       --json               Print the final report as JSON
   -v, --verbose            Print per-prototype progress

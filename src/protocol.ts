@@ -32,7 +32,7 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
   const scene = await readJSON<SceneManifest>(resolve(root, "scene.json"));
   validateSceneManifest(scene);
 
-  const exclusions = ["scene.json", "build-report.json", "merge-report.json", "source-manifest.json"];
+  const exclusions = ["scene.json", "build-report.json", "lod-input-report.json", "runtime assembly-report.json", "merge-report.json", "optimization-report.json", "source-manifest.json"];
   if (typeof scene.reportPath === "string" && scene.reportPath && scene.reportPath !== "build-report.json") {
     exclusions.push(scene.reportPath);
   }
@@ -89,9 +89,9 @@ export async function copyCanonicalScene(snapshot: InputSnapshot, outputRoot: st
     await copyReferencedFile(inputRoot, outputRoot, candidate);
   }
   for (const prototype of snapshot.prototypes) {
-    await copyReferencedFile(inputRoot, outputRoot, prototype.canonicalGLB);
+    await copyReferencedFile(inputRoot, outputRoot, prototype.baseGLB);
     for (const lod of prototype.lods ?? []) {
-      if (lod.level === 0) await copyReferencedFile(inputRoot, outputRoot, lod.path);
+      if (lod.level > 0) await copyReferencedFile(inputRoot, outputRoot, lod.path);
     }
   }
 }
@@ -107,8 +107,8 @@ async function copyReferencedFile(inputRoot: string, outputRoot: string, candida
 }
 
 function validateSceneManifest(scene: SceneManifest): void {
-  if (scene.schema !== "model-optimizer.model-scene" || scene.version !== 1) {
-    throw new Error("input scene.json must use model-optimizer.model-scene v1");
+  if (scene.schema !== "model-optimizer.model-scene" || scene.version !== 2) {
+    throw new Error("input scene.json must use model-optimizer.model-scene v2");
   }
   if (scene.buildStage !== "canonical") {
     throw new Error(`input scene.json buildStage must be canonical, got ${scene.buildStage || "<empty>"}`);
@@ -117,7 +117,7 @@ function validateSceneManifest(scene: SceneManifest): void {
     throw new Error("input scene.json must contain sceneHash");
   }
   if (scene.lodLevels !== 0) {
-    throw new Error(`input canonical scene must contain only LOD0, got lodLevels=${scene.lodLevels}`);
+    throw new Error(`input canonical scene must contain only base assets, got lodLevels=${scene.lodLevels}`);
   }
   if (!scene.prototypeManifest || !scene.instanceManifest || !scene.objectIndex) {
     throw new Error("input scene.json must reference prototype, instance and object manifests");
@@ -143,26 +143,29 @@ async function validatePrototypes(root: string, prototypes: PrototypeManifestEnt
     if (prototype.assetPath !== expectedAssetPath) {
       throw new Error(`prototype ${prototype.prototypeId} assetPath must be ${expectedAssetPath}`);
     }
-    if (prototype.canonicalGLB !== `${prototype.assetPath}/lod0.glb`) {
-      throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be ${prototype.assetPath}/lod0.glb`);
+    const baseName = prototype.assetPath.split("/").at(-1);
+    const baseParent = prototype.assetPath.slice(0, prototype.assetPath.lastIndexOf("/"));
+    const expectedBase = `${baseParent}/${baseName}.glb`;
+    if (prototype.baseGLB !== expectedBase) {
+      throw new Error(`prototype ${prototype.prototypeId} baseGLB must be ${expectedBase}`);
     }
-    const canonicalPath = await resolveExistingSafe(root, prototype.canonicalGLB);
-    if (!prototype.canonicalGLB.toLowerCase().endsWith(".glb")) {
-      throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be a .glb file`);
+    const basePath = await resolveExistingSafe(root, prototype.baseGLB);
+    if (!prototype.baseGLB.toLowerCase().endsWith(".glb")) {
+      throw new Error(`prototype ${prototype.prototypeId} baseGLB must be a .glb file`);
     }
-    if (!Array.isArray(prototype.lods) || prototype.lods.length === 0) {
+    if (!Array.isArray(prototype.lods)) {
       throw new Error(`prototype ${prototype.prototypeId} must declare a lods array`);
     }
-    if (!prototype.lods.some((lod) => lod.level === 0 && lod.path === prototype.canonicalGLB)) {
-      throw new Error(`prototype ${prototype.prototypeId} must declare canonicalGLB as LOD0`);
-    }
     for (const lod of prototype.lods) {
+      if (!Number.isInteger(lod.level) || lod.level <= 0) {
+        throw new Error(`prototype ${prototype.prototypeId} LOD level must be greater than zero`);
+      }
       const expectedLODPath = `${prototype.assetPath}/lod${lod.level}.glb`;
       if (lod.path !== expectedLODPath) {
         throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} path must be ${expectedLODPath}`);
       }
     }
-    void canonicalPath;
+    void basePath;
   }
 }
 

@@ -38,7 +38,7 @@ export const OPTIMIZER_VERSION = "0.2.0";
 export const OPTIMIZATION_PROFILE = "web-v1" as const;
 const TOOLCHAIN_NAME = "meshoptimizer-gltf-transform-basisu";
 const BASISU_VERSION = "1.16.3";
-const SCENE_HASH_EXCLUSIONS = ["scene.json", "build-report.json", "merge-report.json", "source-manifest.json"];
+const SCENE_HASH_EXCLUSIONS = ["scene.json", "build-report.json", "lod-input-report.json", "runtime assembly-report.json", "merge-report.json", "optimization-report.json", "source-manifest.json"];
 
 interface OptimizationSnapshot {
   root: string;
@@ -94,7 +94,7 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
   };
   const report: OptimizationReport = {
     schema: "model-optimizer.optimization-report",
-    version: 1,
+    version: 2,
     status: "failed",
     profile: OPTIMIZATION_PROFILE,
     inputRoot,
@@ -107,6 +107,11 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
 
   try {
     await copyTree(inputRoot, workRoot);
+    // lod-manifest.json is the stage-2 hand-off and hashes the uncompressed
+    // assets. Stage 4 rewrites those assets in place, so keeping that
+    // hand-off would publish stale hashes. optimization-manifest.json below
+    // is the authoritative manifest for the web variant.
+    await removeIfExists(join(workRoot, "lod-manifest.json"));
     await removeIfExists(join(workRoot, "optimization-manifest.json"));
     await removeIfExists(join(workRoot, "optimization-report.json"));
     await removeIfExists(join(workRoot, "optimization-toolchain.lock.json"));
@@ -120,16 +125,29 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
     let compressedTextureCount = 0;
 
     for (const prototype of outputPrototypes) {
-      const canonicalPath = normalizeRelativePath(prototype.canonicalGLB);
-      let canonical = optimizedByPath.get(canonicalPath);
-      if (!canonical) {
-        canonical = await optimizeAsset(snapshot.root, workRoot, canonicalPath, io, toolchain);
-        optimizedByPath.set(canonicalPath, canonical);
-        hasGeometryCompression ||= canonical.geometryCompression === "meshopt";
-        textureCount += canonical.textureCount;
-        compressedTextureCount += canonical.compressedTextureCount;
+      const basePath = normalizeRelativePath(prototype.baseGLB);
+      let base = optimizedByPath.get(basePath);
+      if (!base) {
+        base = await optimizeAsset(snapshot.root, workRoot, basePath, io, toolchain);
+        optimizedByPath.set(basePath, base);
+        hasGeometryCompression ||= base.geometryCompression === "meshopt";
+        textureCount += base.textureCount;
+        compressedTextureCount += base.compressedTextureCount;
       }
-      prototype.contentSha256 = canonical.outputSha256;
+      prototype.contentSha256 = base.outputSha256;
+      reportByPath.set(`${prototype.prototypeId}:0`, {
+        prototypeId: prototype.prototypeId,
+        level: 0,
+        path: basePath,
+        sourceSha256: base.sourceSha256,
+        outputSha256: base.outputSha256,
+        sourceBytes: base.sourceBytes,
+        outputBytes: base.outputBytes,
+        geometryCompression: base.geometryCompression,
+        textureCompression: base.textureCompression,
+        textureCount: base.textureCount,
+        compressedTextureCount: base.compressedTextureCount,
+      });
 
       for (const lod of prototype.lods ?? []) {
         const lodPath = normalizeRelativePath(lod.path);
@@ -141,7 +159,7 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
           textureCount += optimized.textureCount;
           compressedTextureCount += optimized.compressedTextureCount;
         }
-        updateLODMetadata(lod, optimized, canonical.outputSha256);
+        updateLODMetadata(lod, optimized, base.outputSha256);
         reportByPath.set(`${prototype.prototypeId}:${lod.level}`, {
           prototypeId: prototype.prototypeId,
           level: lod.level,
@@ -167,7 +185,7 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
     await writeJSONAtomic(resolveSafe(workRoot, snapshot.scene.prototypeManifest), outputPrototypes);
     await writeJSONAtomic(join(workRoot, "optimization-toolchain.lock.json"), {
       schema: "model-optimizer.optimization-toolchain",
-      version: 1,
+      version: 2,
       package: "model-optimizer",
       packageVersion: OPTIMIZER_VERSION,
       profile: OPTIMIZATION_PROFILE,
@@ -178,15 +196,15 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
 
     const manifestPrototypes: OptimizationManifestPrototype[] = outputPrototypes.map((prototype) => ({
       prototypeId: prototype.prototypeId,
-      assets: (prototype.lods ?? []).map((lod) => {
-        const asset = reportByPath.get(`${prototype.prototypeId}:${lod.level}`);
-        if (!asset) throw new Error(`missing optimization record for ${prototype.prototypeId} LOD${lod.level}`);
+      assets: [0, ...(prototype.lods ?? []).map((lod) => lod.level)].map((level) => {
+        const asset = reportByPath.get(`${prototype.prototypeId}:${level}`);
+        if (!asset) throw new Error(`missing optimization record for ${prototype.prototypeId} level ${level}`);
         return toOptimizationAsset(asset);
       }),
     }));
     const optimizationManifest: OptimizationManifest = {
       schema: "model-optimizer.optimization-manifest",
-      version: 1,
+      version: 2,
       profile: OPTIMIZATION_PROFILE,
       inputSceneHash: snapshot.scene.sceneHash,
       inputPrototypeManifestHash: snapshot.prototypeManifestHash,
@@ -199,6 +217,8 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
 
     const scene = { ...snapshot.scene } as SceneManifest & Record<string, unknown>;
     scene.sceneHash = "";
+    scene.buildStage = "published";
+    delete scene.lodManifest;
     scene.geometryCompression = geometryCompression;
     scene.textureCompression = textureCompression;
     scene.optimizationManifest = "optimization-manifest.json";
@@ -359,9 +379,9 @@ async function findBasisuBinary(): Promise<string> {
   throw new Error(`BasisU ${BASISU_VERSION} does not provide a binary for ${platform()} ${arch()}`);
 }
 
-function updateLODMetadata(lod: PrototypeLOD, optimized: OptimizedGLB, canonicalOutputSha256: string): void {
-  lod.sha256 = optimized.outputSha256;
-  lod.inputSha256 = canonicalOutputSha256;
+function updateLODMetadata(lod: PrototypeLOD, optimized: OptimizedGLB, baseOutputSha256: string): void {
+	lod.sha256 = optimized.outputSha256;
+	lod.inputSha256 = baseOutputSha256;
 }
 
 function toOptimizationAsset(asset: OptimizationReportAsset): OptimizationAsset {
@@ -373,8 +393,10 @@ async function loadOptimizationSnapshot(root: string): Promise<OptimizationSnaps
   const absoluteRoot = resolve(root);
   const scenePath = join(absoluteRoot, "scene.json");
   const scene = await readJSON<SceneManifest>(scenePath);
-  if (scene.schema !== "model-optimizer.model-scene" || scene.version !== 1) throw new Error("input scene.json must use model-optimizer.model-scene v1");
-  if (scene.buildStage !== "published") throw new Error(`model-opt-worker input buildStage must be published, got ${scene.buildStage || "<empty>"}`);
+  if (scene.schema !== "model-optimizer.model-scene" || scene.version !== 2) throw new Error("input scene.json must use model-optimizer.model-scene v2");
+  if (scene.buildStage !== "canonical" && scene.buildStage !== "published") throw new Error(`model-opt-worker input buildStage must be canonical or published, got ${scene.buildStage || "<empty>"}`);
+  if (scene.buildStage === "canonical" && scene.lodLevels !== 0) throw new Error("canonical scene must have lodLevels=0");
+  if (scene.buildStage === "canonical" && scene.lodManifest) throw new Error("canonical scene with a staged LOD manifest must be packed before optimization");
   if (!scene.sceneHash) throw new Error("input scene.json must contain sceneHash");
   if (!Number.isSafeInteger(scene.lodLevels) || scene.lodLevels < 0) throw new Error("input scene.json lodLevels must be a non-negative integer");
   if (!Array.isArray(scene.pages)) throw new Error("input scene.json pages must be an array");
@@ -400,24 +422,23 @@ async function loadOptimizationSnapshot(root: string): Promise<OptimizationSnaps
     if (prototype.assetPath !== expectedAssetPath) {
       throw new Error(`prototype ${prototype.prototypeId} assetPath must be ${expectedAssetPath}`);
     }
-    const canonicalPath = normalizeRelativePath(prototype.canonicalGLB);
-    if (canonicalPath !== `${prototype.assetPath}/lod0.glb`) {
-      throw new Error(`prototype ${prototype.prototypeId} canonicalGLB must be ${prototype.assetPath}/lod0.glb`);
+    const baseName = prototype.assetPath.split("/").at(-1);
+    const baseParent = prototype.assetPath.slice(0, prototype.assetPath.lastIndexOf("/"));
+    const basePath = normalizeRelativePath(prototype.baseGLB);
+    if (basePath !== `${baseParent}/${baseName}.glb`) {
+      throw new Error(`prototype ${prototype.prototypeId} baseGLB must be ${baseParent}/${baseName}.glb`);
     }
-    await requireGLB(absoluteRoot, canonicalPath, `prototype ${prototype.prototypeId} canonicalGLB`);
+    await requireGLB(absoluteRoot, basePath, `prototype ${prototype.prototypeId} baseGLB`);
     if (!Array.isArray(prototype.lods)) throw new Error(`prototype ${prototype.prototypeId} must declare a lods array`);
     const lods = prototype.lods;
-    if (!lods.some((lod) => lod.level === 0 && normalizeRelativePath(lod.path) === canonicalPath)) {
-      throw new Error(`prototype ${prototype.prototypeId} must declare canonicalGLB as LOD0`);
-    }
-    const canonicalHash = await sha256File(resolve(absoluteRoot, canonicalPath));
-    if (prototype.contentSha256 && canonicalHash !== prototype.contentSha256) {
-      throw new Error(`prototype ${prototype.prototypeId} canonical hash mismatch`);
+    const baseHash = await sha256File(resolve(absoluteRoot, basePath));
+    if (prototype.contentSha256 && baseHash !== prototype.contentSha256) {
+      throw new Error(`prototype ${prototype.prototypeId} base hash mismatch`);
     }
     const levels = new Set<number>();
     let highestLevel = -1;
     for (const lod of lods) {
-      if (!Number.isInteger(lod.level) || lod.level < 0 || levels.has(lod.level)) throw new Error(`prototype ${prototype.prototypeId} contains invalid or duplicate LOD ${lod.level}`);
+      if (!Number.isInteger(lod.level) || lod.level <= 0 || levels.has(lod.level)) throw new Error(`prototype ${prototype.prototypeId} contains invalid or duplicate LOD ${lod.level}`);
       levels.add(lod.level);
       highestLevel = Math.max(highestLevel, lod.level);
       if (!Number.isFinite(lod.geometricErrorMeters) || lod.geometricErrorMeters < 0) {
@@ -433,31 +454,27 @@ async function loadOptimizationSnapshot(root: string): Promise<OptimizationSnaps
         const actual = await sha256File(resolve(absoluteRoot, lodPath));
         if (actual !== lod.sha256) throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} hash mismatch`);
       }
-      if (lod.inputSha256 && lod.inputSha256 !== canonicalHash) {
+      if (lod.inputSha256 && lod.inputSha256 !== baseHash) {
         throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} input hash mismatch`);
       }
-      if (lod.level > 0) {
-        const method = typeof lod.method === "string" ? lod.method.trim().toLowerCase() : "";
-        if (!method || method === "identity" || method === "canonical") {
-          throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} does not identify a real simplifier output`);
-        }
+      const method = typeof lod.method === "string" ? lod.method.trim().toLowerCase() : "";
+      if (!method || method === "identity" || method === "canonical") {
+        throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} does not identify a real simplifier output`);
       }
     }
     const orderedLODs = [...lods].sort((left, right) => left.level - right.level);
     let previousError = 0;
     for (const lod of orderedLODs) {
-      if (lod.level === 0 && lod.geometricErrorMeters !== 0) {
-        throw new Error(`prototype ${prototype.prototypeId} LOD0 must have zero geometric error`);
-      }
       if (lod.geometricErrorMeters < previousError) {
         throw new Error(`prototype ${prototype.prototypeId} LOD errors are not monotonic at level ${lod.level}`);
       }
       previousError = lod.geometricErrorMeters;
     }
-    for (let level = 0; level <= scene.lodLevels; level += 1) {
+    for (let level = 1; level <= scene.lodLevels; level += 1) {
       if (!levels.has(level)) throw new Error(`prototype ${prototype.prototypeId} is missing LOD${level}`);
     }
-    if (highestLevel !== scene.lodLevels) {
+    const actualSceneLevel = highestLevel < 0 ? 0 : highestLevel;
+    if (scene.buildStage === "published" && actualSceneLevel !== scene.lodLevels) {
       throw new Error(`prototype ${prototype.prototypeId} LOD level mismatch: scene=${scene.lodLevels} actual=${highestLevel}`);
     }
   }

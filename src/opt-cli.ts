@@ -93,7 +93,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       );
       if (options.verbose) {
         for (const asset of report.assets) {
-          process.stdout.write(`  ${asset.prototypeId} LOD${asset.level}: ${asset.sourceBytes} -> ${asset.outputBytes} bytes\n`);
+          const label = asset.level === 0 ? "base" : `LOD${asset.level}`;
+          process.stdout.write(`  ${asset.prototypeId} ${label}: ${asset.sourceBytes} -> ${asset.outputBytes} bytes\n`);
         }
       }
     }

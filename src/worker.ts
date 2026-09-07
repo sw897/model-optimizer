@@ -1,5 +1,5 @@
 import { copyFile, mkdir } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertDifferentRoots,
@@ -57,7 +57,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
   };
   const report: WorkerReport = {
     schema: "model-optimizer.lod-worker-report",
-    version: 1,
+    version: 2,
     status: "failed",
     inputRoot,
     outputRoot,
@@ -72,7 +72,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
   };
   const manifest: LODManifest = {
     schema: "model-optimizer.lod-manifest",
-    version: 1,
+    version: 2,
     baseSceneHash: snapshot.scene.sceneHash,
     basePrototypeManifestHash: snapshot.prototypeManifestHash,
     toolchain,
@@ -86,7 +86,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
       const cached = state?.reports.find((item) => item.prototypeId === prototype.prototypeId);
       const cachedManifest = state?.manifestEntries.find((item) => item.prototypeId === prototype.prototypeId);
       let result: PrototypeResult;
-      if (fallbackReason && preset.fallback === "lod0-only") {
+      if (fallbackReason && preset.fallback === "base-only") {
         result = await processCanonicalPrototype(snapshot, prototype, fallbackReason);
       } else if (cached && cachedManifest && await isReusableResult(workRoot, cached, cachedManifest, options.maxLevel)) {
         result = { report: cached, manifest: cachedManifest };
@@ -94,7 +94,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
         try {
           result = await processPrototype(snapshot, workRoot, prototype, preset, options.maxLevel);
         } catch (error) {
-          if (options.maxLevel > 0 && preset.fallback === "lod0-only" && error instanceof LODQualityError) {
+          if (options.maxLevel > 0 && preset.fallback === "base-only" && error instanceof LODQualityError) {
             fallbackReason ??= `prototype ${prototype.prototypeId}: ${error.message}`;
             result = await processCanonicalPrototype(snapshot, prototype, `scene fallback: ${fallbackReason}`);
           } else {
@@ -106,7 +106,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
       manifest.prototypes.push(result.manifest);
       await writeJSONAtomic(join(workRoot, "lod-worker-state.json"), {
         schema: "model-optimizer.lod-worker-state",
-        version: 1,
+        version: 2,
         jobKey,
         baseSceneHash: snapshot.scene.sceneHash,
         basePrototypeManifestHash: snapshot.prototypeManifestHash,
@@ -119,8 +119,8 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
       } satisfies WorkerState);
     }
 
-    if (fallbackReason && preset.fallback === "lod0-only") {
-      await downgradeReportToLOD0(workRoot, report, manifest, `scene fallback: ${fallbackReason}`);
+	if (fallbackReason && preset.fallback === "base-only") {
+		await downgradeReportToBaseOnly(workRoot, report, manifest, `scene fallback: ${fallbackReason}`);
     }
 
     const failures = report.prototypes.filter((item) => item.status === "failed");
@@ -152,7 +152,7 @@ interface PrototypeResult {
   report: PrototypeReport;
   manifest: {
     prototypeId: string;
-    canonicalSha256: string;
+    baseSha256: string;
     lods: PrototypeLOD[];
   };
 }
@@ -182,7 +182,7 @@ async function prepareWorkRoot(
         state = await readJSON<WorkerState>(join(workRoot, "lod-worker-state.json"));
         if (
           state.schema !== "model-optimizer.lod-worker-state" ||
-          state.version !== 1 ||
+          state.version !== 2 ||
           state.jobKey !== jobKey ||
           state.baseSceneHash !== snapshot.scene.sceneHash ||
           state.basePrototypeManifestHash !== snapshot.prototypeManifestHash ||
@@ -210,13 +210,13 @@ async function prepareWorkRoot(
 async function isReusableResult(
   workRoot: string,
   report: PrototypeReport,
-  manifest: { prototypeId: string; canonicalSha256: string; lods: PrototypeLOD[] },
+  manifest: { prototypeId: string; baseSha256: string; lods: PrototypeLOD[] },
   maxLevel: number,
 ): Promise<boolean> {
-  if (report.canonicalSha256 !== manifest.canonicalSha256) return false;
-  const canonicalPath = resolveSafe(workRoot, report.canonicalGLB);
-  if ((await sha256File(canonicalPath).catch(() => "")) !== report.canonicalSha256) return false;
-  if (maxLevel === 0) return report.status === "lod0-only" && report.lods.length === 0;
+  if (report.baseSha256 !== manifest.baseSha256) return false;
+  const basePath = resolveSafe(workRoot, report.baseGLB);
+  if ((await sha256File(basePath).catch(() => "")) !== report.baseSha256) return false;
+  if (maxLevel === 0) return report.status === "base-only" && report.lods.length === 0;
   if (report.status !== "succeeded" || report.lods.length < maxLevel || manifest.lods.length < maxLevel) return false;
   for (let level = 1; level <= maxLevel; level += 1) {
     const reportLOD = report.lods.find((item) => item.level === level);
@@ -240,25 +240,25 @@ async function processPrototype(
   preset: Preset,
   maxLevel: number,
 ): Promise<PrototypeResult> {
-  const canonicalRelative = safeRelativePath(snapshot.inputRoot, prototype.canonicalGLB);
-  const canonicalInput = resolve(snapshot.inputRoot, canonicalRelative);
-  const canonicalOutput = resolve(outputRoot, canonicalRelative);
+  const baseRelative = safeRelativePath(snapshot.inputRoot, prototype.baseGLB);
+  const baseInput = resolve(snapshot.inputRoot, baseRelative);
+  const baseOutput = resolve(outputRoot, baseRelative);
   if (maxLevel === 0) {
     return processCanonicalPrototype(snapshot, prototype, "compliance-only");
   }
 
   const levels = preset.levels.filter((level) => level.level <= maxLevel);
-  const outputDirectory = dirname(canonicalOutput);
+  const outputDirectory = join(dirname(baseOutput), basename(baseRelative, ".glb"));
   const result = await simplifyGLB(
-    canonicalInput,
+    baseInput,
     (level) => join(outputDirectory, `lod${level}.glb`),
     levels,
   );
-  const canonicalSha256 = result.sourceHash;
+  const baseSha256 = result.sourceHash;
   const lods = result.levels.map((level) => ({
     ...level,
     path: toManifestPath(outputRoot, level.path),
-    inputSha256: canonicalSha256,
+    inputSha256: baseSha256,
     method: "meshopt-simplify",
     tool: "meshoptimizer",
     toolVersion: "1.2.0",
@@ -267,16 +267,16 @@ async function processPrototype(
   return {
     report: {
       prototypeId: prototype.prototypeId,
-      canonicalGLB: canonicalRelative,
-      canonicalSha256: result.sourceHash,
-      canonicalBytes: result.sourceBytes,
+      baseGLB: baseRelative,
+      baseSha256: result.sourceHash,
+      baseBytes: result.sourceBytes,
       stats: result.sourceStats,
       lods,
       status: "succeeded",
     },
     manifest: {
       prototypeId: prototype.prototypeId,
-      canonicalSha256,
+      baseSha256,
       lods: lods.map(toManifestLOD),
     },
   };
@@ -287,27 +287,27 @@ async function processCanonicalPrototype(
   prototype: PrototypeManifestEntry,
   reason: string,
 ): Promise<PrototypeResult> {
-  const canonicalRelative = safeRelativePath(snapshot.inputRoot, prototype.canonicalGLB);
-  const canonicalInput = resolve(snapshot.inputRoot, canonicalRelative);
-  const sourceStats = await inspectGLB(canonicalInput);
-  const canonicalSha256 = await sha256File(canonicalInput);
-  const canonicalBytes = await fileSize(canonicalInput);
+  const baseRelative = safeRelativePath(snapshot.inputRoot, prototype.baseGLB);
+  const baseInput = resolve(snapshot.inputRoot, baseRelative);
+  const sourceStats = await inspectGLB(baseInput);
+  const baseSha256 = await sha256File(baseInput);
+  const baseBytes = await fileSize(baseInput);
   return {
     report: {
       prototypeId: prototype.prototypeId,
-      canonicalGLB: canonicalRelative,
-      canonicalSha256,
-      canonicalBytes,
+      baseGLB: baseRelative,
+      baseSha256,
+      baseBytes,
       stats: sourceStats,
       lods: [],
-      status: "lod0-only",
+      status: "base-only",
       reason,
     },
-    manifest: { prototypeId: prototype.prototypeId, canonicalSha256, lods: [] },
+    manifest: { prototypeId: prototype.prototypeId, baseSha256, lods: [] },
   };
 }
 
-async function downgradeReportToLOD0(
+async function downgradeReportToBaseOnly(
   workRoot: string,
   report: WorkerReport,
   manifest: LODManifest,
@@ -316,7 +316,7 @@ async function downgradeReportToLOD0(
   const generatedPaths = new Set(report.prototypes.flatMap((prototype) => prototype.lods.map((lod) => lod.path)));
   for (const path of generatedPaths) await removeIfExists(resolveSafe(workRoot, path));
   for (const prototype of report.prototypes) {
-    prototype.status = "lod0-only";
+    prototype.status = "base-only";
     prototype.lods = [];
     prototype.reason = reason;
   }

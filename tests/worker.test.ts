@@ -22,7 +22,7 @@ describe("model-lod worker", () => {
   });
 
   it("parses the standalone worker interface", () => {
-    expect(parseCLI(["--input", "in", "--output", "out", "--max-level", "0", "--preset", "lod0-only"]).maxLevel).toBe(0);
+    expect(parseCLI(["--input", "in", "--output", "out", "--max-level", "0", "--preset", "base-only"]).maxLevel).toBe(0);
     expect(() => parseCLI(["--input", "in", "--output", "out", "--max-level", "-1"])).toThrow();
   });
 
@@ -85,11 +85,11 @@ describe("model-lod worker", () => {
 
   it("supports the compliance-only max-level 0 path", async () => {
     const input = await createCanonicalFixture();
-    const output = join(input, "..", "stage2-lod0");
+    const output = join(input, "..", "stage2-base");
     const report = await runWorker({
       input,
       output,
-      preset: "lod0-only",
+      preset: "base-only",
       maxLevel: 0,
       json: false,
       verbose: false,
@@ -98,7 +98,7 @@ describe("model-lod worker", () => {
       version: false,
     });
     temporaryRoots.push(input, output);
-    expect(report.prototypes[0]?.status).toBe("lod0-only");
+    expect(report.prototypes[0]?.status).toBe("base-only");
     await expect(readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
     const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8")) as {
       prototypes: Array<{ lods: unknown[] }>;
@@ -106,7 +106,7 @@ describe("model-lod worker", () => {
     expect(manifest.prototypes[0]?.lods).toHaveLength(0);
   });
 
-  it("falls back to a scene-wide LOD0 result for unsupported or tiny geometry", async () => {
+  it("falls back to a scene-wide base-only result for unsupported or tiny geometry", async () => {
     const input = await createCanonicalFixture("line");
     const output = join(input, "..", "stage2-line-fallback");
     const report = await runWorker({
@@ -123,7 +123,7 @@ describe("model-lod worker", () => {
     temporaryRoots.push(input, output);
 
     expect(report.status).toBe("succeeded");
-    expect(report.prototypes[0]?.status).toBe("lod0-only");
+    expect(report.prototypes[0]?.status).toBe("base-only");
     expect(report.prototypes[0]?.reason).toContain("unsupported primitive modes");
     const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8")) as {
       prototypes: Array<{ lods: unknown[] }>;
@@ -146,7 +146,7 @@ describe("model-lod worker", () => {
     });
     temporaryRoots.push(tinyInput, tinyOutput);
     expect(tinyReport.status).toBe("succeeded");
-    expect(tinyReport.prototypes[0]?.status).toBe("lod0-only");
+    expect(tinyReport.prototypes[0]?.status).toBe("base-only");
     expect(tinyReport.prototypes[0]?.reason).toContain("did not reduce triangles");
   });
 
@@ -343,13 +343,13 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
   node.setExtras({ featureId: 101 });
   document.createScene("fixture-scene").setExtras({ semantic: "fixture-scene" }).addChild(node);
   const io: NodeIO = createIO();
-  await writeFile(join(prototypeRoot, "lod0.glb"), await io.writeBinary(document));
+	await writeFile(join(root, "assets", "prototypes", "scene-relative", "fixture.glb"), await io.writeBinary(document));
 
   await writeFile(
     join(root, "scene.json"),
     JSON.stringify({
       schema: "model-optimizer.model-scene",
-      version: 1,
+      version: 2,
       buildStage: "canonical",
       sceneHash: "pending",
       canonicalAxis: "obj-z-up-to-gltf-y-up",
@@ -372,8 +372,8 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
         assetPath: "assets/prototypes/scene-relative/fixture",
         sourcePath: "fixture.obj",
         role: "scene-relative",
-        canonicalGLB: "assets/prototypes/scene-relative/fixture/lod0.glb",
-        lods: [{ level: 0, path: "assets/prototypes/scene-relative/fixture/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
+        baseGLB: "assets/prototypes/scene-relative/fixture.glb",
+        lods: [],
       },
     ]),
   );
@@ -381,7 +381,7 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
   await writeFile(join(root, "object-index.json"), "[]\n");
   await writeFile(
     join(root, "component-graph.json"),
-    JSON.stringify({ schema: "model-optimizer.model-component-graph", version: 1, prototypes: [], unreferenced: [] }),
+    JSON.stringify({ schema: "model-optimizer.model-component-graph", version: 2, prototypes: [], unreferenced: [] }),
   );
   const scene = JSON.parse(await readFile(join(root, "scene.json"), "utf8")) as Record<string, unknown>;
   scene.sceneHash = await hashDirectory(root, ["scene.json", "build-report.json", "merge-report.json", "source-manifest.json"]);

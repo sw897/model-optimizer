@@ -114,7 +114,7 @@ export async function simplifyGLB(
   if (sourceStats.unsupportedPrimitives > 0) {
     throw new LODQualityError(
       "unsupported-primitive",
-      `cannot simplify ${inputPath}: unsupported primitive modes ${sourceStats.unsupportedModes.join(", ")}; use the lod0-only preset`,
+      `cannot simplify ${inputPath}: unsupported primitive modes ${sourceStats.unsupportedModes.join(", ")}; use the base-only preset`,
     );
   }
   if (sourceStats.triangleCount === 0) {

@@ -58,12 +58,11 @@ describe("model-opt worker", () => {
       lods: Array<{ level: number; sha256: string; inputSha256: string }>;
     }>;
     expect(prototypes[0]?.contentSha256).toHaveLength(64);
-    expect(prototypes[0]?.lods[0]?.sha256).toBe(prototypes[0]?.contentSha256);
-    expect(prototypes[0]?.lods[0]?.inputSha256).toBe(prototypes[0]?.contentSha256);
+    expect(prototypes[0]?.lods).toHaveLength(0);
     expect(JSON.parse(await readFile(join(output, "component-graph.json"), "utf8"))).toMatchObject({
       unreferenced: ["modelLib/insulator/spare.obj"],
     });
-    const optimizedDocument = await readGLB(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod0.glb"));
+    const optimizedDocument = await readGLB(join(output, "assets", "prototypes", "scene-relative", "fixture.glb"));
     expect(optimizedDocument.hasExtension("EXT_meshopt_compression")).toBe(true);
     expect(optimizedDocument.hasExtension("KHR_texture_basisu")).toBe(true);
     optimizedDocument.getRoot().dispose();
@@ -87,7 +86,7 @@ describe("model-opt worker", () => {
       method: "meshopt-simplify",
     });
     await copyFile(
-      join(input, "assets", "prototypes", "scene-relative", "fixture", "lod0.glb"),
+      join(input, "assets", "prototypes", "scene-relative", "fixture.glb"),
       join(input, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"),
     );
     await writeFile(prototypesPath, `${JSON.stringify(prototypes)}\n`);
@@ -125,7 +124,7 @@ async function createPublishedFixture(): Promise<string> {
   const primitive = document.createPrimitive().setAttribute("POSITION", position).setIndices(indices).setMaterial(material);
   const mesh = document.createMesh("fixture-mesh").addPrimitive(primitive);
   document.createScene("fixture-scene").addChild(document.createNode("fixture-node").setMesh(mesh));
-  await writeFile(join(prototypeRoot, "lod0.glb"), await createIO().writeBinary(document));
+  await writeFile(join(root, "assets", "prototypes", "scene-relative", "fixture.glb"), await createIO().writeBinary(document));
 
   await writeFile(join(root, "source-manifest.json"), "{}\n");
   await writeFile(join(root, "instances.jsonl"), "");
@@ -134,7 +133,7 @@ async function createPublishedFixture(): Promise<string> {
     join(root, "component-graph.json"),
     JSON.stringify({
       schema: "model-optimizer.model-component-graph",
-      version: 1,
+      version: 2,
       prototypes: [],
       unreferenced: ["modelLib/insulator/spare.obj"],
     }),
@@ -150,14 +149,14 @@ async function createPublishedFixture(): Promise<string> {
         assetPath: "assets/prototypes/scene-relative/fixture",
         sourcePath: "fixture.obj",
         role: "scene-relative",
-        canonicalGLB: "assets/prototypes/scene-relative/fixture/lod0.glb",
-        lods: [{ level: 0, path: "assets/prototypes/scene-relative/fixture/lod0.glb", geometricErrorMeters: 0, method: "canonical" }],
+        baseGLB: "assets/prototypes/scene-relative/fixture.glb",
+        lods: [],
       },
     ]),
   );
   const scene = {
     schema: "model-optimizer.model-scene",
-    version: 1,
+    version: 2,
     buildStage: "published",
     sceneHash: "pending",
     canonicalAxis: "obj-z-up-to-gltf-y-up",

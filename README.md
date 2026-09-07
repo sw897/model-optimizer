@@ -1,11 +1,10 @@
 # model-optimizer
 
 
-- `model-lod-worker` — stage 2, generates real LOD1…LODN from canonical LOD0;
+- `model-lod-worker` — stage 2, generates real LOD1…LODN from the canonical base GLB;
 - `model-opt-worker` — stage 4, creates the fixed `web-v1` publishing variant with Meshopt geometry
   and BasisU/KTX2 textures.
 
-`model-lod-worker` consumes the
 
 The LOD worker never edits `scene.json`, `prototypes.json`, `instances.jsonl`, page files, or object
 indexes in the input directory. It writes LOD assets, `lod-manifest.json`, a locked toolchain copy,
@@ -33,13 +32,13 @@ node dist/cli.js \
   --max-level 2
 ```
 
-`--max-level 0` is the compliance-only path: it validates and copies the canonical LOD0 scene,
-and emits a manifest with no simplified levels. The default is level 1. Supported presets are
-`tower-v1`, `span-v1`, and `lod0-only`.
+`--max-level 0` is the compliance-only path: it validates and copies the canonical base scene and
+emits a manifest with no simplified levels. The default is level 1. Supported presets are
+`tower-v1`, `span-v1`, and `base-only`.
 
-`tower-v1` and `span-v1` use a scene-wide `lod0-only` fallback. If any prototype contains line/
+`tower-v1` and `span-v1` use a scene-wide `base-only` fallback. If any prototype contains line/
 point primitives, is too small to reduce, exceeds the error limit, or changes scene semantics, the
-worker validates all canonical assets and publishes a LOD0-only stage instead of emitting an
+worker validates all base assets and publishes a base-only stage instead of emitting an
 identity or partial LOD set. This keeps stage 3's requirement for continuous levels intact.
 
 If a run is interrupted after one or more prototypes finish, the worker retains an unpublishable
@@ -49,8 +48,7 @@ prototype hashes; omit `--resume` to discard that staging directory and start ov
 
 ```bash
   --input ../model/work/model-0904-lod \
-  --output ../model/scene/model-0904 \
-  --runtime assembly
+  --output ../model/scene/model-0904
 ```
 
 After stage 3 has produced a `buildStage=published` scene, create the web publishing variant in a
@@ -80,7 +78,7 @@ The worker produces:
   object-index.json
   component-graph.json       # semantic component/audit graph
   pages/
-  assets/prototypes/<assetKey>/lod0.glb    # canonical asset, semantic source path
+  assets/prototypes/<assetKey>.glb        # base asset, semantic source path
   assets/prototypes/<assetKey>/lod1.glb
   assets/prototypes/<assetKey>/lod2.glb
   lod-manifest.json           # worker/model hand-off
@@ -90,10 +88,10 @@ The worker produces:
 
 `prototypes.json` is the join index, not the physical directory name. Each entry carries
 `prototypeId` for instance references plus `name`, `role`, `sourcePath`, `assetKey` and
-`assetPath`. The canonical and generated assets always live at
-`<assetPath>/lod{level}.glb`; the numeric prototype id is never used as an asset directory.
+`assetPath`. The base asset lives at `<assetPath>.glb`; generated levels live in the same-named
+directory as `<assetPath>/lod{level}.glb`. The numeric prototype id is never used as an asset directory.
 
-`lod-manifest.json` uses `model-optimizer.lod-manifest` v1. Every generated level records the canonical input
+`lod-manifest.json` uses `model-optimizer.lod-manifest` v2. Every generated level records the base input
 hash, output hash, method, tool version, and measured Meshopt error in meters. LOD files are decoded
 before they are committed, hashed, and written atomically with an fsync. The final directory is
 committed with a directory rename, so a failed run cannot expose a partial stage.
@@ -102,19 +100,19 @@ The JSON Schema for the hand-off is checked in at `schemas/lod-manifest.schema.j
 
 ## Simplification policy
 
-- Each level is calculated independently from the canonical LOD0 document.
+- Each level is calculated independently from the canonical base document.
 - glTF-Transform handles document I/O and semantic preservation; MeshoptSimplifier handles triangle
   reduction.
 - Nodes, materials, textures, extras, primitive boundaries, transforms, skins, and animations are
   retained by the document transform and checked by a semantic snapshot before publication.
 - Non-triangle primitives are rejected for a simplification preset and trigger the scene-wide
-  `lod0-only` fallback; they are never written as fake `meshopt-simplify` levels.
+  `base-only` fallback; they are never written as fake `meshopt-simplify` levels.
 - The worker locks topological borders and converts the preset meter error bound to Meshopt's
   normalized error scale.
 - A requested level must reduce triangle count and remain within the preset error limit. If it
   cannot, the fallback policy is applied instead of writing an identity LOD.
 - Canonical GLBs must embed image resources. External image URIs are rejected because the worker
-  copies the canonical GLB as LOD0 and cannot safely publish an unresolved sidecar.
+  copies the base GLB and cannot safely publish an unresolved sidecar.
 - The worker decodes Draco and Meshopt input with the locked toolchain. Existing Draco or Meshopt
   input is re-encoded when the simplified GLB is written; stage-2 output remains uncompressed by
   policy. Stage 4 applies the separate web compression profile described below.
@@ -134,7 +132,9 @@ Every output is decoded again before commit. The worker checks GLB structure, ha
 texture bindings, primitive boundaries, extras, skins and animations. `optimization-manifest.json`
 records the source/output hash and byte counts for every level. `scene.json` records
 `geometryCompression`, `textureCompression`, `optimizationManifest` and a recomputed content hash;
-the operational report is excluded from that hash.
+the operational report is excluded from that hash. The stage-2 `lod-manifest.json` is removed from
+the web variant because its hashes describe the uncompressed hand-off; the optimization manifest
+is authoritative for the rewritten assets.
 
 The raw stage-3 directory remains the archival/fallback result. Publish the web directory to
 The optimization manifest schema is checked in at `schemas/optimization-manifest.schema.json`.

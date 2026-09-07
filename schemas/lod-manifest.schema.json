@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/schemas/model-optimizer.lod-manifest.v1.json",
-  "title": "model input LOD manifest v1",
+  "$id": "https://example.invalid/schemas/model-optimizer.lod-manifest.v2.json",
+  "title": "model input LOD manifest v2",
   "type": "object",
   "required": ["schema", "version", "baseSceneHash", "basePrototypeManifestHash", "toolchain", "prototypes"],
   "properties": {
     "schema": { "const": "model-optimizer.lod-manifest" },
-    "version": { "const": 1 },
+    "version": { "const": 2 },
     "baseSceneHash": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
     "basePrototypeManifestHash": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
     "toolchain": {
@@ -23,10 +23,10 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["prototypeId", "canonicalSha256", "lods"],
+        "required": ["prototypeId", "baseSha256", "lods"],
         "properties": {
           "prototypeId": { "type": "string", "minLength": 1 },
-          "canonicalSha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+          "baseSha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
           "lods": {
             "type": "array",
             "items": {
