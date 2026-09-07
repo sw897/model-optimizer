@@ -3,7 +3,7 @@
   "version": 1,
   "name": "meshoptimizer-gltf-transform",
   "worker": "model-optimizer",
-  "workerVersion": "0.2.0",
+  "workerVersion": "0.3.0",
   "node": ">=20",
   "packages": {
     "@gltf-transform/core": "4.5.0",
@@ -19,6 +19,8 @@
     "profile": "web-v1",
     "geometryCompression": "meshopt",
     "textureCompression": "ktx2",
-    "textureEncoder": "basisu@1.16.3"
+    "textureEncoder": "basisu@1.16.3",
+    "positionPrecision": "lossless",
+    "resourceModel": "standard-tileset-shared-buffers"
   }
 }

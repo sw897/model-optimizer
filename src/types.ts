@@ -1,19 +1,13 @@
-export interface SceneManifest {
-  schema: string;
-  version: number;
-  buildStage: string;
-  sceneHash: string;
+export interface BuildManifest {
+  schema: "model-optimizer.lod-input";
+  version: 1;
+  sceneId: string;
+  sourceHash: string;
   prototypeManifest: string;
   instanceManifest: string;
   objectIndex: string;
-  reportPath?: string;
-  lodManifest?: string;
-  optimizationManifest?: string;
-  pages: unknown[];
-  lodLevels: number;
-  geometryCompression?: string;
-  textureCompression?: string;
-  [key: string]: unknown;
+  layout: string;
+  files: Array<{path: string; sha256: string}>;
 }
 
 export interface PrototypeLOD {
@@ -43,14 +37,17 @@ export interface PrototypeManifestEntry {
 
 export interface LODManifestEntry {
   prototypeId: string;
+  status: "succeeded" | "base-only";
+  reason?: string;
 	baseSha256: string;
   lods: PrototypeLOD[];
 }
 
 export interface LODManifest {
   schema: "model-optimizer.lod-manifest";
-  version: 2;
-  baseSceneHash: string;
+  version: 3;
+  baseBuildManifestHash: string;
+  sceneId: string;
   basePrototypeManifestHash: string;
   toolchain: {
     name: string;
@@ -130,11 +127,12 @@ export interface PrototypeReport {
 
 export interface WorkerReport {
   schema: "model-optimizer.lod-worker-report";
-  version: 2;
+  version: 3;
   status: "succeeded" | "failed";
   inputRoot: string;
   outputRoot: string;
-  baseSceneHash: string;
+  baseBuildManifestHash: string;
+  sceneId: string;
   basePrototypeManifestHash: string;
   preset: string;
   presetVersion: number;
@@ -148,7 +146,8 @@ export interface WorkerReport {
 
 export interface InputSnapshot {
   inputRoot: string;
-  scene: SceneManifest;
+  build: BuildManifest;
+  buildManifestHash: string;
   prototypesPath: string;
   prototypes: PrototypeManifestEntry[];
   prototypeManifestHash: string;
@@ -157,9 +156,10 @@ export interface InputSnapshot {
 
 export interface WorkerState {
   schema: "model-optimizer.lod-worker-state";
-  version: 2;
+  version: 3;
   jobKey: string;
-  baseSceneHash: string;
+  baseBuildManifestHash: string;
+  sceneId: string;
   basePrototypeManifestHash: string;
   preset: string;
   presetVersion: number;
@@ -176,62 +176,4 @@ export interface OptimizationCLIOptions {
   verbose: boolean;
   help: boolean;
   version: boolean;
-}
-
-export interface OptimizationToolchain {
-  name: string;
-  version: string;
-  binarySha256: string;
-  basisuVersion: string;
-  basisuBinarySha256?: string;
-}
-
-export interface OptimizationAsset {
-  level: number;
-  path: string;
-  sourceSha256: string;
-  outputSha256: string;
-  sourceBytes: number;
-  outputBytes: number;
-  geometryCompression: "meshopt" | "none";
-  textureCompression: "ktx2" | "none";
-  textureCount: number;
-  compressedTextureCount: number;
-}
-
-export interface OptimizationManifestPrototype {
-  prototypeId: string;
-  assets: OptimizationAsset[];
-}
-
-export interface OptimizationManifest {
-  schema: "model-optimizer.optimization-manifest";
-  version: 2;
-  profile: "web-v1";
-  inputSceneHash: string;
-  inputPrototypeManifestHash: string;
-  geometryCompression: "meshopt" | "none";
-  textureCompression: "ktx2" | "none";
-  toolchain: OptimizationToolchain;
-  prototypes: OptimizationManifestPrototype[];
-}
-
-export interface OptimizationReportAsset extends OptimizationAsset {
-  prototypeId: string;
-}
-
-export interface OptimizationReport {
-  schema: "model-optimizer.optimization-report";
-  version: 2;
-  status: "succeeded" | "failed";
-  profile: "web-v1";
-  inputRoot: string;
-  outputRoot: string;
-  inputSceneHash: string;
-  outputSceneHash?: string;
-  toolchain: OptimizationToolchain;
-  startedAt: string;
-  finishedAt?: string;
-  assets: OptimizationReportAsset[];
-  errors?: string[];
 }

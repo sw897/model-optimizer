@@ -1,85 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/schemas/model-optimizer.optimization-manifest.v2.json",
-  "title": "model input model web optimization manifest",
+  "title": "Standard tileset optimization manifest v3",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "schema",
     "version",
     "profile",
-    "inputSceneHash",
-    "inputPrototypeManifestHash",
-    "geometryCompression",
-    "textureCompression",
-    "toolchain",
-    "prototypes"
+    "stage",
+    "inputHash",
+    "outputHash",
+    "releaseId",
+    "assets",
+    "toolchain"
   ],
   "properties": {
-    "schema": { "const": "model-optimizer.optimization-manifest" },
-    "version": { "const": 2 },
-    "profile": { "const": "web-v1" },
-    "inputSceneHash": { "$ref": "#/$defs/sha256" },
-    "inputPrototypeManifestHash": { "$ref": "#/$defs/sha256" },
-    "geometryCompression": { "enum": ["none", "meshopt"] },
-    "textureCompression": { "enum": ["none", "ktx2"] },
-    "toolchain": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "version", "binarySha256", "basisuVersion"],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "version": { "type": "string", "minLength": 1 },
-        "binarySha256": { "$ref": "#/$defs/sha256" },
-        "basisuVersion": { "type": "string", "minLength": 1 },
-        "basisuBinarySha256": { "$ref": "#/$defs/sha256" }
-      }
+    "schema": {
+      "const": "model-optimizer.optimization-manifest"
     },
-    "prototypes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["prototypeId", "assets"],
-        "properties": {
-          "prototypeId": { "type": "string", "minLength": 1 },
-          "assets": {
-            "type": "array",
-            "items": { "$ref": "#/$defs/asset" }
-          }
-        }
-      }
-    }
-  },
-  "$defs": {
-    "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
-    "asset": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "level",
-        "path",
-        "sourceSha256",
-        "outputSha256",
-        "sourceBytes",
-        "outputBytes",
-        "geometryCompression",
-        "textureCompression",
-        "textureCount",
-        "compressedTextureCount"
-      ],
-      "properties": {
-        "level": { "type": "integer", "minimum": 0 },
-        "path": { "type": "string", "minLength": 1 },
-        "sourceSha256": { "$ref": "#/$defs/sha256" },
-        "outputSha256": { "$ref": "#/$defs/sha256" },
-        "sourceBytes": { "type": "integer", "minimum": 1 },
-        "outputBytes": { "type": "integer", "minimum": 1 },
-        "geometryCompression": { "enum": ["none", "meshopt"] },
-        "textureCompression": { "enum": ["none", "ktx2"] },
-        "textureCount": { "type": "integer", "minimum": 0 },
-        "compressedTextureCount": { "type": "integer", "minimum": 0 }
-      }
+    "version": {
+      "const": 3
+    },
+    "profile": {
+      "const": "web-v1"
+    },
+    "stage": {
+      "const": "publication"
+    },
+    "inputHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "outputHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "releaseId": {
+      "type": "string"
+    },
+    "assets": {
+      "type": "array"
+    },
+    "toolchain": {
+      "type": "object"
     }
   }
 }

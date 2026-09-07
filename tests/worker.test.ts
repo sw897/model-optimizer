@@ -3,13 +3,13 @@ import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { draco, meshopt } from "@gltf-transform/functions";
 import draco3d from "draco3dgltf";
 import { MeshoptEncoder } from "meshoptimizer";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseCLI } from "../src/cli.js";
 import { createIO, inspectGLB, simplifyGLB } from "../src/glb.js";
-import { hashDirectory } from "../src/fs-utils.js";
+import { sha256File, writeJSON } from "../src/fs-utils.js";
 import { loadInputSnapshot } from "../src/protocol.js";
 import { runWorker } from "../src/worker.js";
 
@@ -49,19 +49,18 @@ describe("model-lod worker", () => {
 
     const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8")) as {
       schema: string;
-      baseSceneHash: string;
+      baseBuildManifestHash: string;
       prototypes: Array<{ lods: Array<{ level: number; path: string; sha256: string; method: string }> }>;
     };
     expect(manifest.schema).toBe("model-optimizer.lod-manifest");
-    const inputScene = JSON.parse(await readFile(join(input, "scene.json"), "utf8")) as { sceneHash: string };
-    expect(manifest.baseSceneHash).toBe(inputScene.sceneHash);
+    expect(manifest.baseBuildManifestHash).toBe(await sha256File(join(input, "_build/build-manifest.json")));
     expect(manifest.prototypes[0]?.lods[0]?.level).toBe(1);
     expect(manifest.prototypes[0]?.lods[0]?.method).toBe("meshopt-simplify");
     expect(manifest.prototypes[0]?.lods[0]?.sha256).toHaveLength(64);
-    expect(await readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toHaveLength(
+    expect(await readFile(join(output, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toHaveLength(
       report.prototypes[0]?.lods[0]?.outputBytes ?? 0,
     );
-    expect(await readFile(join(input, "scene.json"), "utf8")).toContain('"buildStage":"canonical"');
+    expect(await readFile(join(output, "tileset.json"), "utf8")).toBe(await readFile(join(input, "tileset.json"), "utf8"));
 
     await runWorker({
       input,
@@ -75,8 +74,8 @@ describe("model-lod worker", () => {
       version: false,
     });
     temporaryRoots.push(outputRepeat);
-    expect(await readFile(join(outputRepeat, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toEqual(
-      await readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb")),
+    expect(await readFile(join(outputRepeat, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).toEqual(
+      await readFile(join(output, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb")),
     );
     expect(await readFile(join(outputRepeat, "lod-manifest.json"))).toEqual(
       await readFile(join(output, "lod-manifest.json")),
@@ -99,7 +98,7 @@ describe("model-lod worker", () => {
     });
     temporaryRoots.push(input, output);
     expect(report.prototypes[0]?.status).toBe("base-only");
-    await expect(readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
+    await expect(readFile(join(output, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
     const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8")) as {
       prototypes: Array<{ lods: unknown[] }>;
     };
@@ -129,7 +128,7 @@ describe("model-lod worker", () => {
       prototypes: Array<{ lods: unknown[] }>;
     };
     expect(manifest.prototypes[0]?.lods).toHaveLength(0);
-    await expect(readFile(join(output, "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
+    await expect(readFile(join(output, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
 
     const tinyInput = await createCanonicalFixture("triangle");
     const tinyOutput = join(tinyInput, "..", "stage2-tiny-fallback");
@@ -153,11 +152,42 @@ describe("model-lod worker", () => {
   it("rejects a prototype manifest path that escapes the scene root", async () => {
     const input = await createCanonicalFixture();
     temporaryRoots.push(input);
-    const scenePath = join(input, "scene.json");
+    const scenePath = join(input, "_build/build-manifest.json");
     const scene = JSON.parse(await readFile(scenePath, "utf8")) as Record<string, unknown>;
     scene.prototypeManifest = "../outside-prototypes.json";
     await writeFile(scenePath, JSON.stringify(scene));
     await expect(loadInputSnapshot(input)).rejects.toThrow("asset path escapes scene root");
+  });
+
+  it("keeps accepted tower LODs when another prototype is base-only", async () => {
+    const input = await createCanonicalFixture();
+    const line = await createCanonicalFixture("line");
+    const output = join(input, "..", "mixed-lod-output");
+    temporaryRoots.push(input, line, output);
+    const linePath = "_build/assets/prototypes/scene-relative/line.glb";
+    await copyFile(join(line, "_build/assets/prototypes/scene-relative/fixture.glb"), join(input, linePath));
+    const prototypesPath = join(input, "_build/prototypes.json");
+    const prototypes = JSON.parse(await readFile(prototypesPath, "utf8"));
+    prototypes.push({ ...prototypes[0], prototypeId: "prototype-line", name: "line", assetKey: "scene-relative/line", assetPath: "_build/assets/prototypes/scene-relative/line", baseGLB: linePath });
+    await writeJSON(prototypesPath, prototypes);
+    const buildPath = join(input, "_build/build-manifest.json");
+    const build = JSON.parse(await readFile(buildPath, "utf8"));
+    build.files.push({ path: linePath, sha256: await sha256File(join(input, linePath)) });
+    build.files.find((file: {path: string}) => file.path === "_build/prototypes.json").sha256 = await sha256File(prototypesPath);
+    await writeJSON(buildPath, build);
+    const report = await runWorker({ input, output, preset: "tower-v1", maxLevel: 2, json: false, verbose: false, resume: false, help: false, version: false });
+    expect(report.prototypes.find(p => p.prototypeId === "prototype-000001")?.lods.length).toBeGreaterThan(0);
+    expect(report.prototypes.find(p => p.prototypeId === "prototype-line")?.status).toBe("base-only");
+    const manifest = JSON.parse(await readFile(join(output,"lod-manifest.json"),"utf8"));
+    expect(manifest.version).toBe(3);
+    expect(manifest.sceneId).toBe("line-a");
+    expect(manifest.prototypes.find((p: {prototypeId:string}) => p.prototypeId === "prototype-line").status).toBe("base-only");
+  });
+
+  it("rejects a modified source asset before writing stage 2", async () => {
+    const input = await createCanonicalFixture(); temporaryRoots.push(input);
+    await writeFile(join(input,"content/fixture.glb"),"tampered");
+    await expect(loadInputSnapshot(input)).rejects.toThrow();
   });
 
   it("decodes Draco-compressed GLB input with the locked decoder", async () => {
@@ -288,7 +318,7 @@ describe("model-lod worker", () => {
 
 async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "grid"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "model-lod-fixture-"));
-  const prototypeRoot = join(root, "assets", "prototypes", "scene-relative", "fixture");
+  const prototypeRoot = join(root, "_build", "assets", "prototypes", "scene-relative", "fixture");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(prototypeRoot, { recursive: true });
 
@@ -343,48 +373,26 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
   node.setExtras({ featureId: 101 });
   document.createScene("fixture-scene").setExtras({ semantic: "fixture-scene" }).addChild(node);
   const io: NodeIO = createIO();
-	await writeFile(join(root, "assets", "prototypes", "scene-relative", "fixture.glb"), await io.writeBinary(document));
+	await writeFile(join(root, "_build", "assets", "prototypes", "scene-relative", "fixture.glb"), await io.writeBinary(document));
 
-  await writeFile(
-    join(root, "scene.json"),
-    JSON.stringify({
-      schema: "model-optimizer.model-scene",
-      version: 2,
-      buildStage: "canonical",
-      sceneHash: "pending",
-      canonicalAxis: "obj-z-up-to-gltf-y-up",
-      prototypeManifest: "prototypes.json",
-      instanceManifest: "instances.jsonl",
-      objectIndex: "object-index.json",
-      pages: [],
-      lodLevels: 0,
-    }),
-  );
-  await writeFile(join(root, "source-manifest.json"), "{}\n");
-  await writeFile(
-    join(root, "prototypes.json"),
-    JSON.stringify([
-      {
-        prototypeId: "prototype-000001",
-        prototypeKey: "obj:fixture.obj",
-        name: "fixture",
-        assetKey: "scene-relative/fixture",
-        assetPath: "assets/prototypes/scene-relative/fixture",
-        sourcePath: "fixture.obj",
-        role: "scene-relative",
-        baseGLB: "assets/prototypes/scene-relative/fixture.glb",
-        lods: [],
-      },
-    ]),
-  );
-  await writeFile(join(root, "instances.jsonl"), "");
-  await writeFile(join(root, "object-index.json"), "[]\n");
-  await writeFile(
-    join(root, "component-graph.json"),
-    JSON.stringify({ schema: "model-optimizer.model-component-graph", version: 2, prototypes: [], unreferenced: [] }),
-  );
-  const scene = JSON.parse(await readFile(join(root, "scene.json"), "utf8")) as Record<string, unknown>;
-  scene.sceneHash = await hashDirectory(root, ["scene.json", "build-report.json", "merge-report.json", "source-manifest.json"]);
-  await writeFile(join(root, "scene.json"), JSON.stringify(scene));
+
+  await mkdir(join(root, "content"), {recursive:true});
+  await writeFile(join(root, "content/fixture.glb"), await io.writeBinary(document));
+  await writeJSON(join(root,"tileset.json"),{asset:{version:"1.1"},geometricError:0,root:{boundingVolume:{sphere:[0,0,0,100]},geometricError:0,content:{uri:"content/fixture.glb"}}});
+  await writeJSON(join(root,"_build/prototypes.json"),[{
+    prototypeId:"prototype-000001", prototypeKey:"obj:fixture.obj", name:"fixture",
+    assetKey:"scene-relative/fixture",assetPath:"_build/assets/prototypes/scene-relative/fixture",
+    sourcePath:"fixture.obj",role:"scene-relative",baseGLB:"_build/assets/prototypes/scene-relative/fixture.glb",lods:[]
+  }]);
+  await writeFile(join(root,"_build/instances.jsonl"),"");
+  await writeJSON(join(root,"objects/index.json"),{schema:"model-optimizer.tileset-objects",version:1,objects:[]});
+  await writeJSON(join(root,"_build/spatial-layout.json"),{});
+  const files=["tileset.json","content/fixture.glb","_build/prototypes.json","_build/instances.jsonl","objects/index.json","_build/spatial-layout.json","_build/assets/prototypes/scene-relative/fixture.glb"];
+  await writeJSON(join(root,"_build/build-manifest.json"),{
+    schema:"model-optimizer.lod-input",version:1,sceneId:"line-a",sourceHash:"source",
+    prototypeManifest:"_build/prototypes.json",instanceManifest:"_build/instances.jsonl",
+    objectIndex:"objects/index.json",layout:"_build/spatial-layout.json",
+    files:await Promise.all(files.map(async path=>({path,sha256:await sha256File(join(root,path))})))
+  });
   return root;
 }

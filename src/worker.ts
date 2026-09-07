@@ -32,7 +32,7 @@ import type {
   WorkerReport,
 } from "./types.js";
 
-const WORKER_VERSION = "0.2.0";
+const WORKER_VERSION = "0.3.0";
 const TOOLCHAIN_NAME = "meshoptimizer-gltf-transform";
 const TOOLCHAIN_VERSION = `worker-${WORKER_VERSION}+@gltf-transform@4.5.0+draco3dgltf@1.5.7+meshoptimizer@1.2.0`;
 
@@ -57,11 +57,12 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
   };
   const report: WorkerReport = {
     schema: "model-optimizer.lod-worker-report",
-    version: 2,
+    version: 3,
     status: "failed",
     inputRoot,
     outputRoot,
-    baseSceneHash: snapshot.scene.sceneHash,
+    baseBuildManifestHash: snapshot.buildManifestHash,
+    sceneId: snapshot.build.sceneId,
     basePrototypeManifestHash: snapshot.prototypeManifestHash,
     preset: preset.name,
     presetVersion: preset.version,
@@ -72,8 +73,9 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
   };
   const manifest: LODManifest = {
     schema: "model-optimizer.lod-manifest",
-    version: 2,
-    baseSceneHash: snapshot.scene.sceneHash,
+    version: 3,
+    baseBuildManifestHash: snapshot.buildManifestHash,
+    sceneId: snapshot.build.sceneId,
     basePrototypeManifestHash: snapshot.prototypeManifestHash,
     toolchain,
     prototypes: [],
@@ -81,22 +83,18 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
 
   try {
     const prototypes = [...snapshot.prototypes].sort((left, right) => left.prototypeId.localeCompare(right.prototypeId));
-    let fallbackReason: string | undefined;
     for (const prototype of prototypes) {
       const cached = state?.reports.find((item) => item.prototypeId === prototype.prototypeId);
       const cachedManifest = state?.manifestEntries.find((item) => item.prototypeId === prototype.prototypeId);
       let result: PrototypeResult;
-      if (fallbackReason && preset.fallback === "base-only") {
-        result = await processCanonicalPrototype(snapshot, prototype, fallbackReason);
-      } else if (cached && cachedManifest && await isReusableResult(workRoot, cached, cachedManifest, options.maxLevel)) {
+      if (cached && cachedManifest && await isReusableResult(workRoot, cached, cachedManifest, options.maxLevel)) {
         result = { report: cached, manifest: cachedManifest };
       } else {
         try {
           result = await processPrototype(snapshot, workRoot, prototype, preset, options.maxLevel);
         } catch (error) {
           if (options.maxLevel > 0 && preset.fallback === "base-only" && error instanceof LODQualityError) {
-            fallbackReason ??= `prototype ${prototype.prototypeId}: ${error.message}`;
-            result = await processCanonicalPrototype(snapshot, prototype, `scene fallback: ${fallbackReason}`);
+            result = await processCanonicalPrototype(snapshot, prototype, error.message);
           } else {
             throw error;
           }
@@ -106,9 +104,10 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
       manifest.prototypes.push(result.manifest);
       await writeJSONAtomic(join(workRoot, "lod-worker-state.json"), {
         schema: "model-optimizer.lod-worker-state",
-        version: 2,
+        version: 3,
         jobKey,
-        baseSceneHash: snapshot.scene.sceneHash,
+        baseBuildManifestHash: snapshot.buildManifestHash,
+    sceneId: snapshot.build.sceneId,
         basePrototypeManifestHash: snapshot.prototypeManifestHash,
         preset: preset.name,
         presetVersion: preset.version,
@@ -119,16 +118,10 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
       } satisfies WorkerState);
     }
 
-	if (fallbackReason && preset.fallback === "base-only") {
-		await downgradeReportToBaseOnly(workRoot, report, manifest, `scene fallback: ${fallbackReason}`);
-    }
 
     const failures = report.prototypes.filter((item) => item.status === "failed");
     if (failures.length > 0) {
       throw new Error(failures.map((failure) => `${failure.prototypeId}: ${failure.reason ?? "failed"}`).join("; "));
-    }
-    if (!fallbackReason && options.maxLevel > 0 && report.prototypes.some((item) => item.lods.length < options.maxLevel)) {
-      throw new Error("requested LOD levels are not available for every prototype; use a compatible preset or max-level 0");
     }
 
     await writeJSON(join(workRoot, "lod-manifest.json"), manifest);
@@ -154,6 +147,8 @@ interface PrototypeResult {
     prototypeId: string;
     baseSha256: string;
     lods: PrototypeLOD[];
+    status: "succeeded" | "base-only";
+    reason?: string;
   };
 }
 
@@ -161,7 +156,7 @@ async function makeJobKey(snapshot: InputSnapshot, preset: Preset, maxLevel: num
   const presetHash = await sha256Buffer(Buffer.from(JSON.stringify(preset), "utf8"));
   return sha256Buffer(
     Buffer.from(
-      [snapshot.scene.sceneHash, snapshot.prototypeManifestHash, preset.name, String(preset.version), presetHash, String(maxLevel), snapshot.toolchainLockHash].join("\n"),
+      [snapshot.buildManifestHash, snapshot.prototypeManifestHash, preset.name, String(preset.version), presetHash, String(maxLevel), snapshot.toolchainLockHash].join("\n"),
       "utf8",
     ),
   );
@@ -182,14 +177,14 @@ async function prepareWorkRoot(
         state = await readJSON<WorkerState>(join(workRoot, "lod-worker-state.json"));
         if (
           state.schema !== "model-optimizer.lod-worker-state" ||
-          state.version !== 2 ||
+          state.version !== 3 ||
           state.jobKey !== jobKey ||
-          state.baseSceneHash !== snapshot.scene.sceneHash ||
+          state.baseBuildManifestHash !== snapshot.buildManifestHash ||
           state.basePrototypeManifestHash !== snapshot.prototypeManifestHash ||
           state.preset !== preset.name ||
           state.presetVersion !== preset.version ||
           state.maxLevel !== maxLevel ||
-          !(await pathExists(join(workRoot, "scene.json")))
+          !(await pathExists(join(workRoot, "tileset.json")))
         ) {
           state = undefined;
         }
@@ -249,11 +244,18 @@ async function processPrototype(
 
   const levels = preset.levels.filter((level) => level.level <= maxLevel);
   const outputDirectory = join(dirname(baseOutput), basename(baseRelative, ".glb"));
-  const result = await simplifyGLB(
-    baseInput,
-    (level) => join(outputDirectory, `lod${level}.glb`),
-    levels,
-  );
+  const accepted: Awaited<ReturnType<typeof simplifyGLB>>[] = [];
+  const skipped: string[] = [];
+  for (const level of levels) {
+    try {
+      accepted.push(await simplifyGLB(baseInput, n => join(outputDirectory, `lod${n}.glb`), [level]));
+    } catch (error) {
+      if (preset.fallback !== "base-only" || !(error instanceof LODQualityError)) throw error;
+      skipped.push(`LOD${level.level}: ${error.message}`);
+    }
+  }
+  if (!accepted.length) return processCanonicalPrototype(snapshot, prototype, skipped.join("; ") || "no accepted LOD");
+  const result = { ...accepted[0]!, levels: accepted.flatMap(item => item.levels) };
   const baseSha256 = result.sourceHash;
   const lods = result.levels.map((level) => ({
     ...level,
@@ -273,11 +275,14 @@ async function processPrototype(
       stats: result.sourceStats,
       lods,
       status: "succeeded",
+      ...(skipped.length ? {reason: skipped.join("; ")} : {}),
     },
     manifest: {
       prototypeId: prototype.prototypeId,
       baseSha256,
       lods: lods.map(toManifestLOD),
+      status: "succeeded",
+      ...(skipped.length ? {reason: skipped.join("; ")} : {}),
     },
   };
 }
@@ -303,24 +308,8 @@ async function processCanonicalPrototype(
       status: "base-only",
       reason,
     },
-    manifest: { prototypeId: prototype.prototypeId, baseSha256, lods: [] },
+    manifest: { prototypeId: prototype.prototypeId, baseSha256, lods: [], status: "base-only", reason },
   };
-}
-
-async function downgradeReportToBaseOnly(
-  workRoot: string,
-  report: WorkerReport,
-  manifest: LODManifest,
-  reason: string,
-): Promise<void> {
-  const generatedPaths = new Set(report.prototypes.flatMap((prototype) => prototype.lods.map((lod) => lod.path)));
-  for (const path of generatedPaths) await removeIfExists(resolveSafe(workRoot, path));
-  for (const prototype of report.prototypes) {
-    prototype.status = "base-only";
-    prototype.lods = [];
-    prototype.reason = reason;
-  }
-  for (const prototype of manifest.prototypes) prototype.lods = [];
 }
 
 function toManifestLOD(level: LevelReport): PrototypeLOD {

@@ -57,14 +57,14 @@ export function parseOptimizationCLI(argv: string[]): OptimizationCLIOptions {
 export function optimizationHelpText(): string {
   return `model-opt-worker ${OPTIMIZER_VERSION}
 
-Stage-4 web asset optimizer for a published model scene.
-The web-v1 profile is fixed: Meshopt geometry and BasisU/KTX2 textures.
+Standard 3D Tiles resource-graph optimizer for lod-input or runtime assembly output.
+The web-v1 profile is fixed: lossless Meshopt buffers and BasisU/KTX2 material textures.
 
 Usage:
-  model-opt-worker --input <published-scene-root> --output <web-scene-root> [options]
+  model-opt-worker --input <tileset-directory> --output <optimized-directory> [options]
 
 Options:
-  -i, --input <path>       Stage-3 published scene root (required)
+  -i, --input <path>       Stage-1 or Stage-3 tileset directory (required)
   -o, --output <path>      Empty optimized scene root (required)
       --json               Print the final report as JSON
   -v, --verbose            Print per-asset progress
@@ -91,6 +91,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       process.stdout.write(
         `model-opt-worker completed: profile=${OPTIMIZATION_PROFILE} assets=${report.assets.length} output-scene=${report.outputSceneHash}\n`,
       );
+      if (report.preservedExtensions?.length) process.stdout.write(`  feature metadata validated and preserved: ${report.preservedExtensions.join(", ")}\n`);
       if (options.verbose) {
         for (const asset of report.assets) {
           const label = asset.level === 0 ? "base" : `LOD${asset.level}`;

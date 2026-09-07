@@ -1,179 +1,48 @@
-import { mkdir, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import {
-  copyFileChecked,
-  copyTree,
-  hashDirectory,
-  pathExists,
-  readJSON,
-  resolveExistingSafe,
-  resolveSafe,
-  safeRelativePath,
-  sha256File,
-} from "./fs-utils.js";
-import type { InputSnapshot, PrototypeManifestEntry, SceneManifest } from "./types.js";
-
-const REQUIRED_FILES = [
-  "scene.json",
-  "source-manifest.json",
-  "prototypes.json",
-  "instances.jsonl",
-  "object-index.json",
-  "component-graph.json",
-];
+import { resolve } from "node:path";
+import { copyFileChecked, pathExists, readJSON, resolveExistingSafe, sha256File } from "./fs-utils.js";
+import { loadResourceGraph } from "./resource-graph.js";
+import type { BuildManifest, InputSnapshot, PrototypeManifestEntry } from "./types.js";
 
 export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapshot> {
   const root = resolve(inputRoot);
-  for (const name of REQUIRED_FILES) {
-    await requireFile(resolve(root, name), name);
+  const manifestPath = await resolveExistingSafe(root, "_build/build-manifest.json");
+  const build = await readJSON<BuildManifest>(manifestPath);
+  if (build.schema !== "model-optimizer.lod-input" || build.version !== 1 || !build.sceneId || !build.sourceHash) {
+    throw new Error("input must contain model-optimizer.lod-input v1 _build/build-manifest.json");
   }
-
-  const scene = await readJSON<SceneManifest>(resolve(root, "scene.json"));
-  validateSceneManifest(scene);
-
-  const exclusions = ["scene.json", "build-report.json", "lod-input-report.json", "runtime assembly-report.json", "merge-report.json", "optimization-report.json", "source-manifest.json"];
-  if (typeof scene.reportPath === "string" && scene.reportPath && scene.reportPath !== "build-report.json") {
-    exclusions.push(scene.reportPath);
+  if (await pathExists(resolve(root, "optimization-manifest.json"))) throw new Error("LOD input must be an unoptimized lod-input directory");
+  for (const field of [build.prototypeManifest, build.instanceManifest, build.objectIndex, build.layout]) await resolveExistingSafe(root, field);
+  if (!Array.isArray(build.files) || !build.files.length) throw new Error("build manifest must contain file hashes");
+  const graph = await loadResourceGraph(root);
+  const files = new Set<string>();
+  for (const file of build.files) {
+    if (!file.path || files.has(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("invalid or duplicate build file record");
+    files.add(file.path);
+    const absolute = await resolveExistingSafe(root, file.path);
+    if (await sha256File(absolute) !== file.sha256) throw new Error(`build file hash mismatch: ${file.path}`);
   }
-  const computedSceneHash = await hashDirectory(root, exclusions);
-  if (computedSceneHash !== scene.sceneHash) {
-    throw new Error(`input scene hash mismatch: manifest=${scene.sceneHash} actual=${computedSceneHash}`);
+  for (const path of [...graph.files.keys(), build.prototypeManifest, build.instanceManifest, build.objectIndex, build.layout]) {
+    if (!files.has(path)) throw new Error(`build manifest does not cover required file: ${path}`);
   }
-
-  const prototypesPath = await resolveExistingSafe(root, scene.prototypeManifest || "prototypes.json");
+  const prototypesPath = await resolveExistingSafe(root, build.prototypeManifest);
   const prototypes = await readJSON<PrototypeManifestEntry[]>(prototypesPath);
-  await validatePrototypes(root, prototypes);
-
-  const prototypeManifestHash = await sha256File(prototypesPath);
-  const toolchainLockPath = fileURLToPath(new URL("../toolchain.lock.json", import.meta.url));
-  const toolchainLockHash = await sha256File(toolchainLockPath);
-
-  return {
-    inputRoot: root,
-    scene,
-    prototypesPath,
-    prototypes,
-    prototypeManifestHash,
-    toolchainLockHash,
-  };
+  if (!Array.isArray(prototypes) || !prototypes.length) throw new Error("prototype manifest must contain at least one prototype");
+  const ids = new Set<string>();
+  for (const prototype of prototypes) {
+    if (!prototype.prototypeId || ids.has(prototype.prototypeId)) throw new Error("duplicate or empty prototype ID");
+    ids.add(prototype.prototypeId);
+    const expected = `_build/assets/prototypes/${prototype.assetKey}`;
+    if (!prototype.assetKey || prototype.assetPath !== expected || prototype.baseGLB !== `${expected}.glb`) throw new Error(`invalid physical prototype path: ${prototype.prototypeId}`);
+    await resolveExistingSafe(root, prototype.baseGLB);
+    if (!files.has(prototype.baseGLB)) throw new Error(`build manifest does not cover prototype: ${prototype.baseGLB}`);
+    if (prototype.contentSha256 && await sha256File(resolve(root, prototype.baseGLB)) !== prototype.contentSha256) throw new Error(`prototype base hash mismatch: ${prototype.prototypeId}`);
+    if (!Array.isArray(prototype.lods) || prototype.lods.length) throw new Error("lod-input prototype must contain only its base asset");
+  }
+  return { inputRoot: root, build, buildManifestHash: await sha256File(manifestPath), prototypesPath, prototypes, prototypeManifestHash: await sha256File(prototypesPath), toolchainLockHash: await sha256File(fileURLToPath(new URL("../toolchain.lock.json", import.meta.url))) };
 }
 
 export async function copyCanonicalScene(snapshot: InputSnapshot, outputRoot: string): Promise<void> {
-  const inputRoot = snapshot.inputRoot;
-  const files = new Set<string>([
-    "scene.json",
-    "source-manifest.json",
-    "instances.jsonl",
-    "object-index.json",
-    "component-graph.json",
-    snapshot.scene.prototypeManifest || "prototypes.json",
-  ]);
-  for (const relativePath of files) {
-    const source = resolveSafe(inputRoot, relativePath);
-    await copyFileChecked(source, resolveSafe(outputRoot, relativePath));
-  }
-
-  for (const directory of ["assets", "pages", "objects"]) {
-    const source = resolve(inputRoot, directory);
-    if (await pathExists(source)) await copyTree(source, resolve(outputRoot, directory));
-  }
-
-  // Copy any referenced page or prototype asset that does not live below the
-  // conventional directory.  The path check keeps the stage-2 output closed
-  // over the canonical input root.
-  for (const page of snapshot.scene.pages) {
-    if (!page || typeof page !== "object") continue;
-    const candidate = (page as { path?: unknown }).path;
-    if (typeof candidate !== "string" || candidate.length === 0) continue;
-    await copyReferencedFile(inputRoot, outputRoot, candidate);
-  }
-  for (const prototype of snapshot.prototypes) {
-    await copyReferencedFile(inputRoot, outputRoot, prototype.baseGLB);
-    for (const lod of prototype.lods ?? []) {
-      if (lod.level > 0) await copyReferencedFile(inputRoot, outputRoot, lod.path);
-    }
-  }
-}
-
-async function copyReferencedFile(inputRoot: string, outputRoot: string, candidate: string): Promise<void> {
-  const relativePath = safeRelativePath(inputRoot, candidate);
-  await resolveExistingSafe(inputRoot, relativePath);
-  const source = resolve(inputRoot, relativePath);
-  const info = await stat(source);
-  if (!info.isFile()) throw new Error(`referenced asset is not a file: ${candidate}`);
-  const destination = resolve(outputRoot, relativePath);
-  if (!(await pathExists(destination))) await copyFileChecked(source, destination);
-}
-
-function validateSceneManifest(scene: SceneManifest): void {
-  if (scene.schema !== "model-optimizer.model-scene" || scene.version !== 2) {
-    throw new Error("input scene.json must use model-optimizer.model-scene v2");
-  }
-  if (scene.buildStage !== "canonical") {
-    throw new Error(`input scene.json buildStage must be canonical, got ${scene.buildStage || "<empty>"}`);
-  }
-  if (!scene.sceneHash || typeof scene.sceneHash !== "string") {
-    throw new Error("input scene.json must contain sceneHash");
-  }
-  if (scene.lodLevels !== 0) {
-    throw new Error(`input canonical scene must contain only base assets, got lodLevels=${scene.lodLevels}`);
-  }
-  if (!scene.prototypeManifest || !scene.instanceManifest || !scene.objectIndex) {
-    throw new Error("input scene.json must reference prototype, instance and object manifests");
-  }
-  if (!Array.isArray(scene.pages)) throw new Error("input scene.json pages must be an array");
-}
-
-async function validatePrototypes(root: string, prototypes: PrototypeManifestEntry[]): Promise<void> {
-  if (!Array.isArray(prototypes) || prototypes.length === 0) {
-    throw new Error("input prototypes.json must contain at least one prototype");
-  }
-  const seen = new Set<string>();
-  for (const prototype of prototypes) {
-    if (!prototype || typeof prototype !== "object") throw new Error("input prototypes.json contains an invalid entry");
-    if (!prototype.prototypeId || seen.has(prototype.prototypeId)) {
-      throw new Error(`input prototypes.json contains duplicate or empty prototype id: ${prototype.prototypeId || "<empty>"}`);
-    }
-    seen.add(prototype.prototypeId);
-    if (!prototype.name || !prototype.assetKey || !prototype.assetPath || !prototype.sourcePath || !prototype.role) {
-      throw new Error(`prototype ${prototype.prototypeId} must contain name, assetKey, assetPath, sourcePath and role`);
-    }
-    const expectedAssetPath = `assets/prototypes/${prototype.assetKey}`;
-    if (prototype.assetPath !== expectedAssetPath) {
-      throw new Error(`prototype ${prototype.prototypeId} assetPath must be ${expectedAssetPath}`);
-    }
-    const baseName = prototype.assetPath.split("/").at(-1);
-    const baseParent = prototype.assetPath.slice(0, prototype.assetPath.lastIndexOf("/"));
-    const expectedBase = `${baseParent}/${baseName}.glb`;
-    if (prototype.baseGLB !== expectedBase) {
-      throw new Error(`prototype ${prototype.prototypeId} baseGLB must be ${expectedBase}`);
-    }
-    const basePath = await resolveExistingSafe(root, prototype.baseGLB);
-    if (!prototype.baseGLB.toLowerCase().endsWith(".glb")) {
-      throw new Error(`prototype ${prototype.prototypeId} baseGLB must be a .glb file`);
-    }
-    if (!Array.isArray(prototype.lods)) {
-      throw new Error(`prototype ${prototype.prototypeId} must declare a lods array`);
-    }
-    for (const lod of prototype.lods) {
-      if (!Number.isInteger(lod.level) || lod.level <= 0) {
-        throw new Error(`prototype ${prototype.prototypeId} LOD level must be greater than zero`);
-      }
-      const expectedLODPath = `${prototype.assetPath}/lod${lod.level}.glb`;
-      if (lod.path !== expectedLODPath) {
-        throw new Error(`prototype ${prototype.prototypeId} LOD${lod.level} path must be ${expectedLODPath}`);
-      }
-    }
-    void basePath;
-  }
-}
-
-async function requireFile(path: string, name: string): Promise<void> {
-  const info = await stat(path).catch(() => undefined);
-  if (!info?.isFile()) throw new Error(`input scene is missing ${name}`);
-}
-
-export async function ensureOutputParent(outputRoot: string): Promise<void> {
-  await mkdir(dirname(resolve(outputRoot)), { recursive: true });
+  const files = new Set([...snapshot.build.files.map(file => file.path), "_build/build-manifest.json"]);
+  for (const path of files) await copyFileChecked(await resolveExistingSafe(snapshot.inputRoot, path), resolve(outputRoot, path));
 }

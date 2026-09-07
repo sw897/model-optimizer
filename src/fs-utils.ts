@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, copyFile, cp, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, cp, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { constants as fsConstants, existsSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -174,10 +174,8 @@ function realpathForComparison(path: string): string {
 }
 
 export async function createTemporarySibling(outputRoot: string): Promise<string> {
-  const temporary = `${outputRoot}.tmp-${process.pid}-${Date.now()}`;
-  await removeIfExists(temporary);
-  await mkdir(temporary, { recursive: true });
-  return temporary;
+  await mkdir(dirname(outputRoot), { recursive: true });
+  return mkdtemp(`${outputRoot}.tmp-`);
 }
 
 export async function commitDirectory(temporary: string, outputRoot: string): Promise<void> {

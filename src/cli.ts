@@ -5,7 +5,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CLIOptions } from "./types.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 export function parseCLI(argv: string[]): CLIOptions {
   const values: Record<string, string | boolean | undefined> = {};
@@ -72,13 +72,13 @@ export function parseCLI(argv: string[]): CLIOptions {
 export function helpText(): string {
   return `model-lod-worker ${VERSION}
 
-Stage-2 LOD worker for model canonical lod-input output.
+Stage-2 LOD worker for standard lod-input output and _build/build-manifest.json.
 
 Usage:
   model-lod-worker --input <lod-input-root> --output <lod-stage-root> [options]
 
 Options:
-  -i, --input <path>       Stage-1 canonical scene root (required)
+  -i, --input <path>       Stage-1 lod-input directory (required)
   -o, --output <path>      Empty stage-2 output root (required)
       --preset <name>      tower-v1, span-v1, or base-only (default: tower-v1)
       --max-level <N>      Highest LOD level to generate (default: 1; 0 validates the base scene)
