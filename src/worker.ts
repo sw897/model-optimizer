@@ -252,6 +252,7 @@ async function processPrototype(
     } catch (error) {
       if (preset.fallback !== "base-only" || !(error instanceof LODQualityError)) throw error;
       skipped.push(`LOD${level.level}: ${error.message}`);
+      break;
     }
   }
   if (!accepted.length) return processCanonicalPrototype(snapshot, prototype, skipped.join("; ") || "no accepted LOD");

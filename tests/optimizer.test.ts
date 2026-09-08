@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
+import sharp from "sharp";
 import { runOptimizer } from "../src/optimizer.js";
 import { loadResourceGraph, gltfBuffers, resourcePath } from "../src/resource-graph.js";
 import { writeJSON } from "../src/fs-utils.js";
@@ -55,6 +56,50 @@ describe("standard tileset optimizer", () => {
     expect(a.images[0].uri).not.toBe(a.images[1].uri);
     expect(a.extensionsRequired).toContain("KHR_texture_basisu");
     expect(a.materials[0].pbrMetallicRoughness.baseColorTexture.index).not.toBe(a.materials[0].normalTexture.index);
+  }, 30000);
+  it.each([
+    { codec: "EXT_texture_webp", format: "webp", required: false, protected: false },
+    { codec: "EXT_texture_avif", format: "avif", required: true, protected: false },
+    { codec: "EXT_texture_webp", format: "webp", required: true, protected: true },
+  ] as const)("rewrites $codec sources and declarations (protected=$protected)", async testCase => {
+    const { root, input } = await fixture(true);
+    const image = await sharp({ create: { width: 4, height: 4, channels: 4, background: { r: 80, g: 160, b: 240, alpha: 1 } } }).toFormat(testCase.format).toBuffer();
+    await writeFile(join(input, `resources/preferred.${testCase.format}`), image);
+    const source = join(input, "content/a.gltf");
+    const gltf = JSON.parse(await readFile(source, "utf8"));
+    gltf.images.push({ uri: `../resources/preferred.${testCase.format}`, mimeType: `image/${testCase.format}` });
+    gltf.textures[0] = { sampler: 0, extras: { identity: "porcelain" }, extensions: { [testCase.codec]: { source: 1 } }, ...(testCase.required ? {} : { source: 0 }) };
+    gltf.samplers = [{ wrapS: 33071, wrapT: 33071 }];
+    delete gltf.materials[0].normalTexture;
+    gltf.extensionsUsed.push(testCase.codec);
+    if (testCase.required) gltf.extensionsRequired.push(testCase.codec);
+    if (testCase.protected) {
+      gltf.extensionsUsed.push("EXT_mesh_features");
+      gltf.meshes[0].primitives[0].extensions = { EXT_mesh_features: { featureIds: [{ featureCount: 2, propertyTable: 0, texture: { index: 0, channels: [0] } }] } };
+    }
+    await writeJSON(source, gltf);
+    const output = join(root, "web");
+    expect((await runOptimizer(options(input, output))).status).toBe("succeeded");
+    const graph = await loadResourceGraph(output), result = graph.documents.get("content/a.gltf")!;
+    const texture = result.textures[result.materials[0].pbrMetallicRoughness.baseColorTexture.index];
+    expect(texture).toMatchObject({ sampler: 0, extras: { identity: "porcelain" } });
+    expect(texture.source).toBeUndefined();
+    expect(Object.keys(texture.extensions)).toEqual(["KHR_texture_basisu"]);
+    const materialImage = result.images[texture.extensions.KHR_texture_basisu.source];
+    expect(materialImage.mimeType).toBe("image/ktx2");
+    expect(materialImage.uri).toContain(`preferred.${testCase.format}/`);
+    expect(result.extensionsRequired).toContain("KHR_texture_basisu");
+    if (testCase.protected) {
+      expect(result.extensionsUsed).toContain(testCase.codec);
+      expect(result.extensionsRequired).toContain(testCase.codec);
+      const featureTexture = result.textures[result.meshes[0].primitives[0].extensions.EXT_mesh_features.featureIds[0].texture.index];
+      const featureImage = result.images[featureTexture.extensions[testCase.codec].source];
+      expect(await readFile(join(output, resourcePath("content/a.gltf", featureImage.uri)))).toEqual(image);
+    } else {
+      expect(result.images).toHaveLength(1);
+      expect(result.extensionsUsed).not.toContain(testCase.codec);
+      expect(result.extensionsRequired).not.toContain(testCase.codec);
+    }
   }, 30000);
   it("rejects remote dependencies, cycles and symlink escapes before publishing", async () => {
     const {root,input} = await fixture();

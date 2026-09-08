@@ -29,7 +29,7 @@ model-lod-worker --input ./line-a-build --output ./line-a-lod --preset tower-v1 
 model-opt-worker --input ./line-a-published --output ./line-a-web
 ```
 
-`--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。未达到减面/误差要求的候选记录原因；其他原型及已成功级别继续保留。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
+`--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。同一原型遇到质量失败后停止后续级别，仅保留连续成功前缀；首级失败则保持 base-only，其他原型不受影响。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
 
 
 ```text
@@ -71,7 +71,7 @@ prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath
 
 共享几何按源资源、缓冲区间、accessor 布局与编码策略归集；不同内容引用同一输出 buffer。首版保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。没有自行实现减面或压缩算法。
 
-纹理按源内容、颜色用途、编码参数缓存。底色/自发光使用颜色编码，法线/数据使用线性 UASTC。相同图像同时用于颜色和数据时输出不同变体。feature-ID/property 纹理保留原始无损字节，材质纹理独立优化，避免改变对象 ID。
+纹理按源内容、颜色用途、编码参数缓存。底色/自发光使用颜色编码，法线/数据使用线性 UASTC。相同图像同时用于颜色和数据时输出不同变体。转换 WebP/AVIF 来源时同步清理已替换的 codec 引用与声明。feature-ID/property 纹理保留原始无损字节及所需 codec，材质纹理独立优化，避免改变对象 ID。
 
 输入 glTF 的 JSON 扩展直接保留，包括 EXT_instance_features 和 EXT_structural_metadata；glTF-Transform 用于解码检查，不通过不了解实例 feature 的读写循环重建这些元数据。
 

@@ -181,6 +181,7 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
 
 function safeName(value: string): string { return value.replace(/[^\p{L}\p{N}._-]+/gu, "_") || "asset"; }
 function requireExtension(json: JSONObject, name: string): void { for (const key of ["extensionsUsed", "extensionsRequired"]) json[key] = [...new Set([...(json[key] ?? []), name])]; }
+const TEXTURE_CODECS = ["KHR_texture_basisu", "EXT_texture_webp", "EXT_texture_avif", "MSFT_texture_dds"];
 
 function referencedViews(json: JSONObject): Set<number> {
   const result = new Set<number>();
@@ -238,14 +239,16 @@ async function optimizeTextures(graph: ResourceGraph, source: string, target: st
   const convert = async (index: number, usage: TextureUsage): Promise<number> => {
     const key = `${index}:${usage}`; if (variants.has(key)) return variants.get(key)!;
     const texture = textures[index]; if (!texture) throw new Error(`invalid texture index in ${source}`);
-    const image = images[texture.extensions?.KHR_texture_basisu?.source ?? texture.source]; if (!image) throw new Error(`invalid image index in ${source}`);
+    const image = images[texture.extensions?.KHR_texture_basisu?.source ?? texture.extensions?.EXT_texture_webp?.source ?? texture.extensions?.EXT_texture_avif?.source ?? texture.source]; if (!image) throw new Error(`invalid image index in ${source}`);
     let bytes: Buffer;
     if (typeof image.uri === "string") bytes = image.uri.startsWith("data:") ? dataURI(image.uri) : await readFile(await resolveExistingSafe(graph.root, resourcePath(source, image.uri)));
     else if (Number.isInteger(image.bufferView)) bytes = readView(json.bufferViews[image.bufferView], buffers, source);
     else throw new Error(`missing image data in ${source}`);
     const path = await getTexture(bytes, usage, image.name || posix.basename(image.uri || source));
     const newImage = outputImages.length; outputImages.push({ ...image, uri: relativeURI(target, path), mimeType: "image/ktx2" }); delete outputImages[newImage]!.bufferView;
-    const newTexture = { ...texture, extensions: { ...texture.extensions, KHR_texture_basisu: { source: newImage } } }; delete newTexture.source;
+    const extensions = { ...texture.extensions };
+    for (const codec of TEXTURE_CODECS) delete extensions[codec];
+    const newTexture = { ...texture, extensions: { ...extensions, KHR_texture_basisu: { source: newImage } } }; delete newTexture.source;
     const outputIndex = outputTextures.length; outputTextures.push(newTexture); variants.set(key, outputIndex); return outputIndex;
   };
   const walk = async (value: unknown): Promise<void> => {
@@ -262,6 +265,14 @@ async function optimizeTextures(graph: ResourceGraph, source: string, target: st
   await walk(json.materials ?? []);
   if (outputTextures.length) { json.textures = outputTextures; json.images = outputImages; if (variants.size) requireExtension(json, "KHR_texture_basisu"); }
   else for (const image of images) if (typeof image.uri === "string" && !image.uri.startsWith("data:")) image.uri = relativeURI(target, paths.get(resourcePath(source, image.uri))!);
+  for (const codec of TEXTURE_CODECS) {
+    if ((json.textures ?? []).some((texture: JSONObject) => texture.extensions?.[codec])) continue;
+    for (const key of ["extensionsUsed", "extensionsRequired"]) {
+      if (!Array.isArray(json[key])) continue;
+      json[key] = json[key].filter((extension: string) => extension !== codec);
+      if (!json[key].length) delete json[key];
+    }
+  }
 }
 
 function rewriteExtras(extras: JSONObject, paths: Map<string, string>, releaseId: string): void {

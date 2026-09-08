@@ -6,12 +6,13 @@ import { MeshoptEncoder } from "meshoptimizer";
 import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseCLI } from "../src/cli.js";
 import { createIO, inspectGLB, simplifyGLB } from "../src/glb.js";
 import { sha256File, writeJSON } from "../src/fs-utils.js";
 import { loadInputSnapshot } from "../src/protocol.js";
 import { runWorker } from "../src/worker.js";
+import * as glb from "../src/glb.js";
 
 const temporaryRoots: string[] = [];
 
@@ -103,6 +104,42 @@ describe("model-lod worker", () => {
       prototypes: Array<{ lods: unknown[] }>;
     };
     expect(manifest.prototypes[0]?.lods).toHaveLength(0);
+  });
+
+  it("keeps a real LOD gap candidate base-only when its first level cannot reduce", async () => {
+    const input = await createCanonicalFixture("lod-gap");
+    const output = join(input, "..", "stage2-gap-output");
+    temporaryRoots.push(input, output);
+    const report = await runWorker({ input, output, preset: "tower-v1", maxLevel: 2, json: false, verbose: false, resume: false, help: false, version: false });
+    expect(report.status).toBe("succeeded");
+    expect(report.prototypes[0]).toMatchObject({ status: "base-only", lods: [], stats: { triangleCount: 18 } });
+    expect(report.prototypes[0]?.reason).toContain("LOD1 did not reduce triangles (18 -> 18)");
+    const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8"));
+    expect(manifest.prototypes[0]).toMatchObject({ status: "base-only", lods: [] });
+    await expect(readFile(join(output, "_build/assets/prototypes/scene-relative/fixture/lod2.glb"))).rejects.toThrow();
+  });
+
+  it("retains accepted levels and stops after a later quality failure", async () => {
+    const input = await createCanonicalFixture();
+    const output = join(input, "..", "stage2-prefix-output");
+    temporaryRoots.push(input, output);
+    const simplify = glb.simplifyGLB;
+    const spy = vi.spyOn(glb, "simplifyGLB").mockImplementation(async (source, destination, levels) => {
+      if (levels[0]?.level === 2) throw new glb.LODQualityError("no-reduction", "LOD2 quality failure");
+      return simplify(source, destination, levels);
+    });
+    try {
+      const report = await runWorker({ input, output, preset: "tower-v1", maxLevel: 3, json: false, verbose: false, resume: false, help: false, version: false });
+      expect(report.status).toBe("succeeded");
+      expect(report.prototypes[0]?.status).toBe("succeeded");
+      expect(report.prototypes[0]?.lods.map(level => level.level)).toEqual([1]);
+      expect(report.prototypes[0]?.reason).toContain("LOD2 quality failure");
+      expect(spy.mock.calls.map(call => call[2][0]?.level)).toEqual([1, 2]);
+      const manifest = JSON.parse(await readFile(join(output, "lod-manifest.json"), "utf8"));
+      expect(manifest.prototypes[0].lods.map((level: { level: number }) => level.level)).toEqual([1]);
+      expect(await inspectGLB(join(output, manifest.prototypes[0].lods[0].path))).toMatchObject({ unsupportedPrimitives: 0 });
+      await expect(readFile(join(output, "_build/assets/prototypes/scene-relative/fixture/lod3.glb"))).rejects.toThrow();
+    } finally { spy.mockRestore(); }
   });
 
   it("falls back to a scene-wide base-only result for unsupported or tiny geometry", async () => {
@@ -316,7 +353,7 @@ describe("model-lod worker", () => {
   });
 });
 
-async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "grid"): Promise<string> {
+async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" | "lod-gap" = "grid"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "model-lod-fixture-"));
   const prototypeRoot = join(root, "_build", "assets", "prototypes", "scene-relative", "fixture");
   const { mkdir } = await import("node:fs/promises");
@@ -324,7 +361,7 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
 
   const document = new Document();
   const buffer = document.createBuffer();
-  const width = 12;
+  const width = geometry === "lod-gap" ? 3 : 12;
   const positions: number[] = [];
   const indices: number[] = [];
   if (geometry === "line") {
@@ -335,7 +372,7 @@ async function createCanonicalFixture(geometry: "grid" | "line" | "triangle" = "
   } else {
     for (let y = 0; y <= width; y += 1) {
       for (let x = 0; x <= width; x += 1) {
-        positions.push(x, y, Math.sin(x * 0.3) * Math.cos(y * 0.2) * 0.1);
+        positions.push(x, y, geometry === "lod-gap" ? 0.3 * Math.sin(x * 2.1 + y * 3.1) : Math.sin(x * 0.3) * Math.cos(y * 0.2) * 0.1);
       }
     }
     const vertex = (x: number, y: number) => y * (width + 1) + x;
