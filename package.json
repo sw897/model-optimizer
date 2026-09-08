@@ -2,7 +2,7 @@
   "name": "model-optimizer",
   "version": "0.3.0",
   "private": true,
-  "description": "Standard 3D Tiles LOD and shared-resource web optimization workers",
+  "description": "Standard 3D Tiles LOD and GLB/tileset web optimization workers",
   "type": "module",
   "files": [
     "dist",

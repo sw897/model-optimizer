@@ -1,5 +1,6 @@
 import { MeshoptDecoder } from "meshoptimizer";
 import { gltfBuffers, type JSONObject, type ResourceGraph } from "./resource-graph.js";
+import { componentKey } from "./publication-index.js";
 
 export interface FeatureValidation { assets: number; featureSets: number; instances: number; propertyRows: number }
 
@@ -8,6 +9,14 @@ export async function validateFeatureMetadata(graph: ResourceGraph): Promise<Fea
   const objectIndexPath = graph.documents.get(graph.entry)?.asset?.extras?.objectIndex;
   const objectIndex = graph.documents.get(objectIndexPath)?.objects as JSONObject[] | undefined;
   const objects = new Map((objectIndex ?? []).map(object => [object.objectKey, object]));
+  const componentIndexPath = graph.documents.get(graph.entry)?.asset?.extras?.componentIndex;
+  const componentIndex = graph.documents.get(componentIndexPath);
+  const components = new Map<string, JSONObject>();
+  const expectedFeatures = new Set<string>();
+  for (const info of componentIndex?.shards ?? []) for (const record of graph.documents.get(info.path)!.components) {
+    components.set(componentKey(record), record);
+    for (const content of record.contents) expectedFeatures.add(JSON.stringify([componentKey(record), content.path]));
+  }
   await MeshoptDecoder.ready;
   for (const name of graph.gltfs) {
     const doc = graph.documents.get(name)!;
@@ -59,16 +68,33 @@ export async function validateFeatureMetadata(graph: ResourceGraph): Promise<Fea
           decodedProperties.set(key, decoded);
         }
       }
-      if (schema?.id === "model_objects_v1") {
-        for (const key of ["sceneId", "objectId", "objectKey", "componentId", "prototypeKey", "kind"]) {
-          if (decodedProperties.get(key)?.length !== table.count) throw new Error(`missing model object metadata ${key} in ${name}`);
+      if (schema?.id === "model_objects_v1") throw new Error(`obsolete model feature schema in ${name}; rebuild with model_features_v2`);
+      if (schema?.id === "model_features_v2") {
+        const part = table.class === "prototype_parts";
+        if (!part && table.class !== "model_components") throw new Error(`unsupported model feature class in ${name}`);
+        const required = part ? ["partId", "displayName", "sourceName"] : ["objectId", "kind", "entityId", "entityType", "componentId", "componentType", "prototypeKey", "displayName", "sourceName", ...(objectIndex ? ["sceneId", "objectKey"] : [])];
+        for (const key of required) {
+          if (decodedProperties.get(key)?.length !== table.count) throw new Error(`missing model feature metadata ${key} in ${name}`);
         }
+        const rowKeys = new Set<string>();
         for (let row = 0; row < table.count; row++) {
           const value = (key: string): string => decodedProperties.get(key)![row]!;
-          if (value("objectKey") !== `${value("sceneId")}/${value("objectId")}` || !value("componentId") || !value("prototypeKey")) throw new Error(`inconsistent scene/object/component identity in ${name}`);
+          if (part) {
+            if (!value("partId") || rowKeys.has(value("partId"))) throw new Error(`invalid or duplicate part identity in ${name}`);
+            rowKeys.add(value("partId")); continue;
+          }
+          if (["objectId", "kind", "entityId", "entityType", "componentId", "componentType", "prototypeKey"].some(key => !value(key))) throw new Error(`inconsistent object/component identity in ${name}`);
+          const key = componentKey({ objectKey: objectIndex ? value("objectKey") : value("objectId"), componentId: value("componentId") });
+          if (rowKeys.has(key)) throw new Error(`duplicate component identity in ${name}`);
+          rowKeys.add(key);
           if (objectIndex) {
             const object = objects.get(value("objectKey"));
-            if (!object || object.sceneId !== value("sceneId") || object.objectId !== value("objectId") || object.kind !== value("kind") || !object.contents.includes(name)) throw new Error(`feature identity does not match object index in ${name}`);
+            if (value("objectKey") !== `${value("sceneId")}/${value("objectId")}` || !object || object.sceneId !== value("sceneId") || object.objectId !== value("objectId") || object.kind !== value("kind") || !object.contents.includes(name)) throw new Error(`feature identity does not match object index in ${name}`);
+            if (componentIndex) {
+              const record = components.get(key);
+              if (!record || required.filter(field => field !== "kind").some(field => record[field] !== value(field)) || !record.contents.some((content: JSONObject) => content.path === name)) throw new Error(`feature identity does not match component index in ${name}`);
+              expectedFeatures.delete(JSON.stringify([key, name]));
+            }
           }
         }
       }
@@ -116,5 +142,6 @@ export async function validateFeatureMetadata(graph: ResourceGraph): Promise<Fea
     }
     result.assets++;
   }
+  if (expectedFeatures.size) throw new Error("component index references content without matching feature metadata");
   return result;
 }

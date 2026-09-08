@@ -57,15 +57,17 @@ export function parseOptimizationCLI(argv: string[]): OptimizationCLIOptions {
 export function optimizationHelpText(): string {
   return `model-opt-worker ${OPTIMIZER_VERSION}
 
-Standard 3D Tiles resource-graph optimizer for lod-input or runtime assembly output.
+Automatic GLB and standard 3D Tiles resource-graph optimizer.
 The web-v1 profile is fixed: lossless Meshopt buffers and BasisU/KTX2 material textures.
 
 Usage:
   model-opt-worker --input <tileset-directory> --output <optimized-directory> [options]
+  model-opt-worker --input <glb-directory> --output <optimized-directory> [options]
+  model-opt-worker --input <model.glb> --output <optimized.glb> [options]
 
 Options:
-  -i, --input <path>       Stage-1 or Stage-3 tileset directory (required)
-  -o, --output <path>      Empty optimized scene root (required)
+  -i, --input <path>       Single GLB, GLB directory, or tileset directory (required)
+  -o, --output <path>      New GLB file or empty output directory (required)
       --json               Print the final report as JSON
   -v, --verbose            Print per-asset progress
   -h, --help               Show this help
@@ -89,7 +91,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } else {
       process.stdout.write(
-        `model-opt-worker completed: profile=${OPTIMIZATION_PROFILE} assets=${report.assets.length} output-scene=${report.outputSceneHash}\n`,
+        `model-opt-worker completed: input=${report.inputKind} profile=${OPTIMIZATION_PROFILE} assets=${report.assets.length} output-hash=${report.outputSceneHash}\n`,
       );
       if (report.preservedExtensions?.length) process.stdout.write(`  feature metadata validated and preserved: ${report.preservedExtensions.join(", ")}\n`);
       if (options.verbose) {

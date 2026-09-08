@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { copyFileChecked, pathExists, readJSON, resolveExistingSafe, sha256File } from "./fs-utils.js";
-import { loadResourceGraph } from "./resource-graph.js";
+import { includeManagement, loadResourceGraph } from "./resource-graph.js";
+import { prototypeHasPartFeatures } from "./glb.js";
 import type { BuildManifest, InputSnapshot, PrototypeManifestEntry } from "./types.js";
 
 export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapshot> {
@@ -15,6 +16,7 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
   for (const field of [build.prototypeManifest, build.instanceManifest, build.objectIndex, build.layout]) await resolveExistingSafe(root, field);
   if (!Array.isArray(build.files) || !build.files.length) throw new Error("build manifest must contain file hashes");
   const graph = await loadResourceGraph(root);
+  await includeManagement(graph);
   const files = new Set<string>();
   for (const file of build.files) {
     if (!file.path || files.has(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("invalid or duplicate build file record");
@@ -35,6 +37,7 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
     const expected = `_build/assets/prototypes/${prototype.assetKey}`;
     if (!prototype.assetKey || prototype.assetPath !== expected || prototype.baseGLB !== `${expected}.glb`) throw new Error(`invalid physical prototype path: ${prototype.prototypeId}`);
     await resolveExistingSafe(root, prototype.baseGLB);
+    await prototypeHasPartFeatures(resolve(root, prototype.baseGLB));
     if (!files.has(prototype.baseGLB)) throw new Error(`build manifest does not cover prototype: ${prototype.baseGLB}`);
     if (prototype.contentSha256 && await sha256File(resolve(root, prototype.baseGLB)) !== prototype.contentSha256) throw new Error(`prototype base hash mismatch: ${prototype.prototypeId}`);
     if (!Array.isArray(prototype.lods) || prototype.lods.length) throw new Error("lod-input prototype must contain only its base asset");

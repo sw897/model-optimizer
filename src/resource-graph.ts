@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { posix, resolve } from "node:path";
 import { resolveExistingSafe, sha256Buffer, sha256File } from "./fs-utils.js";
+import { loadPublicationManagement } from "./publication-index.js";
 
 export type JSONObject = Record<string, any>;
 export interface ResourceGraph {
@@ -85,6 +86,16 @@ export function visitURIs(value: unknown, callback: (object: JSONObject, key: st
 }
 
 export async function loadResourceGraph(root: string, entry = "tileset.json"): Promise<ResourceGraph> {
+  return loadGraph(root, [entry], true);
+}
+
+export async function loadGLTFResourceGraph(root: string, entries: string[]): Promise<ResourceGraph> {
+  if (!entries.length || entries.some(entry => ![".glb", ".gltf"].includes(posix.extname(entry).toLowerCase()))) throw new Error("model input must contain GLB or glTF resources");
+  return loadGraph(root, entries, false);
+}
+
+async function loadGraph(root: string, entries: string[], tileset: boolean): Promise<ResourceGraph> {
+  const entry = entries[0]!;
   const graph: ResourceGraph = { root: resolve(root), entry, files: new Map(), documents: new Map(), gltfs: new Set(), hash: "" };
   const active = new Set<string>();
   const visit = async (path: string, depth: number): Promise<void> => {
@@ -104,7 +115,7 @@ export async function loadResourceGraph(root: string, entry = "tileset.json"): P
     if (extension === ".gltf" || extension === ".glb") {
       if (json.asset?.version !== "2.0") throw new Error(`glTF asset must use version 2.0: ${path}`);
       graph.gltfs.add(path);
-    } else if (path === entry && (!json.root || !["1.0", "1.1"].includes(json.asset?.version))) {
+    } else if (tileset && path === entry && (!json.root || !["1.0", "1.1"].includes(json.asset?.version))) {
       throw new Error("input must contain a standard tileset.json");
     }
     graph.documents.set(path, json);
@@ -116,7 +127,7 @@ export async function loadResourceGraph(root: string, entry = "tileset.json"): P
     for (const dependency of dependencies) await visit(dependency, depth + 1);
     active.delete(path);
   };
-  await visit(entry, 0);
+  for (const path of entries) await visit(path, 0);
   await hashGraph(graph);
   return graph;
 }
@@ -127,22 +138,7 @@ export async function hashGraph(graph: ResourceGraph): Promise<void> {
 }
 
 export async function includeManagement(graph: ResourceGraph): Promise<void> {
-  const catalogs = new Set<string>();
-  for (const json of graph.documents.values()) if (typeof json.asset?.extras?.catalog === "string") catalogs.add(json.asset.extras.catalog);
-  const conventional = await stat(resolve(graph.root, "_pack/catalog.json")).catch(() => undefined);
-  if (conventional?.isFile()) catalogs.add("_pack/catalog.json");
-  for (const catalogPath of catalogs) {
-    const file = await resolveExistingSafe(graph.root, catalogPath);
-    const catalog = JSON.parse(await readFile(file, "utf8")) as JSONObject;
-    if (catalog.schema !== "model-optimizer.tileset-catalog" || catalog.version !== 1) throw new Error(`unsupported catalog: ${catalogPath}`);
-    for (const path of [catalogPath, catalog.objectIndex]) {
-      const absolute = await resolveExistingSafe(graph.root, path);
-      const bytes = await readFile(absolute);
-      const json = JSON.parse(bytes.toString("utf8")) as JSONObject;
-      graph.documents.set(path, json);
-      graph.files.set(path, { sha256: await sha256Buffer(bytes), bytes: bytes.length });
-    }
-  }
+  await loadPublicationManagement(graph);
   await hashGraph(graph);
 }
 

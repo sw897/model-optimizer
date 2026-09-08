@@ -2,7 +2,7 @@
 
 
 - `model-lod-worker`：读取 lod-input 的 `_build` 构建资料，用 glTF-Transform + MeshoptSimplifier 生成组件 LOD。
-- `model-opt-worker`：读取标准 `tileset.json` 资源图，用 Meshopt 无损缓冲压缩和 BasisU/KTX2 优化网络与 GPU 资源。
+- `model-opt-worker`：自动识别单个 GLB、传统模型目录或标准 `tileset.json` 资源图，用 Meshopt 无损缓冲压缩和 BasisU/KTX2 材质纹理压缩优化网络与 GPU 资源。
 
 ## 安装与打包
 
@@ -15,7 +15,28 @@ npm run package
 
 发行包包含 dist、协议 schema、README 和锁定工具链。安装包后通过两个 bin 命令运行；源码目录可用 `node dist/cli.js` 与 `node dist/opt-cli.js`。
 
-## 基础模型无需 LOD
+## 单 GLB 与传统模型目录
+
+```bash
+model-opt-worker -i ./models/sample.glb -o ./web/sample.glb --json
+model-opt-worker -i ./models -o ./models-web --json
+```
+
+`--input/-i` 与 `--output/-o` 决定输入、输出，输入形态自动识别：
+
+| 输入 | 输出 | 定位资料与报告 |
+|---|---|---|
+| 单个 `.glb` 文件 | 自包含 `.glb` 文件，文件名可不同 | 仅写目标 GLB；`--json` 将报告输出到标准输出 |
+| 根目录没有 `tileset.json` 的传统模型目录 | 递归优化每个 GLB，保留全部相对路径和文件名 | 其他普通文件原字节复制，包括 `offset.json`；增加优化清单和报告 |
+| 根目录含 `tileset.json` 的标准瓦片目录 | 按可达资源图生成独立发布目录 | 更新运行资源、管理索引、优化清单和报告，详见下文 |
+
+
+优化固定采用 `web-v1`：几何缓冲无损 Meshopt 编码，材质纹理采用 BasisU/KTX2。不减面、不生成 LOD，不改坐标、节点变换或顶点/索引数值；纹理压缩不是像素无损。单文件输出将缓冲和纹理嵌入 GLB，不依赖额外资源文件。
+
+输出 GLB 必须不存在；输出目录必须不存在或为空。目录输入输出不能相交，目录内不接受符号链接。已有 `asset.extras.modelOptimizer` 标记的 GLB 会被拒绝，重新优化应使用原始输入。
+
+
+## 3D Tiles：基础模型无需 LOD
 
 ```bash
 model-opt-worker --input ./line-a-build --output ./line-a-web
@@ -30,6 +51,8 @@ model-opt-worker --input ./line-a-published --output ./line-a-web
 ```
 
 `--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。同一原型遇到质量失败后停止后续级别，仅保留连续成功前缀；首级失败则保持 base-only，其他原型不受影响。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
+
+输入必须是 canonical 原型：世界组件表或 GPU 实例装配模型被拒绝。带 part feature 的原型可以进入阶段 2，但当前化简器尚不能证明逐面 part 归属和存活不变，因此保留 base-only，并在报告中记录原因；不删除 part 元数据以换取化简结果。
 
 
 ```text
@@ -67,7 +90,7 @@ prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath
 
 ## 标准资源图优化
 
-优化器递归读取 external tileset、glTF/GLB、buffer、纹理和 schema。支持输入根内相对 URI 与 glTF data URI；远程资源应先归集。循环引用、损坏范围、外部路径、冲突输出在发布前失败。
+对标准瓦片目录，优化器递归读取 external tileset、glTF/GLB、buffer、纹理和 schema。支持输入根内相对 URI 与 glTF data URI；远程资源应先归集。循环引用、损坏范围、外部路径、冲突输出在发布前失败。
 
 共享几何按源资源、缓冲区间、accessor 布局与编码策略归集；不同内容引用同一输出 buffer。首版保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。没有自行实现减面或压缩算法。
 
@@ -76,10 +99,12 @@ prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath
 输入 glTF 的 JSON 扩展直接保留，包括 EXT_instance_features 和 EXT_structural_metadata；glTF-Transform 用于解码检查，不通过不了解实例 feature 的读写循环重建这些元数据。
 
 
-优化输出为 publication：
+
+标准瓦片目录的优化输出为 publication：
 
 - 仅保留标准运行资源及发布管理资料，不携带 `_build` 或 LOD hand-off。
-- 继承 sceneId/objectKey，重写 catalog、objects 中的内容路径及 release 引用。
+- 继承 sceneId/objectKey/componentId，重写 catalog、objects、components 中的内容路径及 release 引用；保留 bounds 与真实 LOD level。
+- 从入口 catalog 发现公开组件分片，校验 root→catalog→index→shard 摘要链；优化后按 4 MiB 预算重新分片，更新摘要链和 32 位 releaseId，不从 `_build` 补查发布索引。
 - 重新生成资源 hash、optimization-manifest v3 和报告。
 - 目录输出新建、通过校验后原子提交；失败不覆盖输入或已有发布成果。
 - 已优化输入应从原始构建/发布目录重新加工。

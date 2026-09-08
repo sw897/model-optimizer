@@ -3,6 +3,8 @@ import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { convertPrimitiveToTriangles, getGLPrimitiveCount, simplify, weld } from "@gltf-transform/functions";
 import draco3d from "draco3dgltf";
 import { MeshoptEncoder, MeshoptSimplifier, MeshoptDecoder } from "meshoptimizer";
+import { readFile } from "node:fs/promises";
+import { parseGLB } from "./resource-graph.js";
 import { fileSize, readFirstBytes, removeIfExists, sha256Buffer, sha256File, writeAtomic } from "./fs-utils.js";
 import type { LevelReport, PresetLevel, PrototypeStats } from "./types.js";
 
@@ -107,6 +109,7 @@ export async function simplifyGLB(
   outputPathForLevel: (level: number) => string,
   levels: PresetLevel[],
 ): Promise<GLBResult> {
+  if (await prototypeHasPartFeatures(inputPath)) throw new LODQualityError("semantic-change", "part feature ownership/survival is not proven by the simplifier; preserve base-only prototype");
   const io = await createDecodeIO();
   const sourceDocument = await readGLB(inputPath, io);
   await MeshoptSimplifier.ready;
@@ -217,6 +220,14 @@ export async function simplifyGLB(
   }
 
   return { sourceBytes, sourceHash, sourceStats, levels: reports };
+}
+
+// 在 glTF-Transform 解码前检查原始 JSON，防止未知扩展被忽略后误入减面。
+export async function prototypeHasPartFeatures(path: string): Promise<boolean> {
+  const json = parseGLB(await readFile(path), path).json;
+  const tables = json.extensions?.EXT_structural_metadata?.propertyTables ?? [];
+  if (tables.some((table: { class?: string }) => table.class === "model_components") || (json.nodes ?? []).some((node: { extensions?: Record<string, unknown> }) => node.extensions?.EXT_mesh_gpu_instancing || node.extensions?.EXT_instance_features)) throw new Error(`LOD input must be a canonical prototype, not an assembled component/instance model: ${path}`);
+  return tables.length > 0 || (json.extensionsUsed ?? []).some((name: string) => ["EXT_mesh_features", "EXT_instance_features", "EXT_structural_metadata"].includes(name));
 }
 
 interface SloppyFallbackResult {

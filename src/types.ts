@@ -177,3 +177,5 @@ export interface OptimizationCLIOptions {
   help: boolean;
   version: boolean;
 }
+
+export type OptimizationInputKind = "tileset" | "glb-directory" | "glb-file";
