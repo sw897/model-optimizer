@@ -15,6 +15,7 @@ await new Promise((resolvePromise, reject) => {
   const child = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--pack-destination", artifactRoot], {
     cwd: projectRoot,
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
   child.on("error", reject);
   child.on("exit", (code) => (code === 0 ? resolvePromise() : reject(new Error(`npm pack exited with ${code}`))));
