@@ -21,6 +21,7 @@
     "build": "tsc -p tsconfig.json",
     "postbuild": "chmod +x dist/cli.js dist/opt-cli.js",
     "package": "npm run build && node scripts/package-release.mjs",
+    "package:portable": "npm run build && node scripts/package-portable.mjs",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "test": "vitest run",

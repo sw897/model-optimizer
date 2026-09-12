@@ -15,6 +15,8 @@ npm run package
 
 发行包包含 dist、协议 schema、README 和锁定工具链。安装包后通过两个 bin 命令运行；源码目录可用 `node dist/cli.js` 与 `node dist/opt-cli.js`。
 
+Windows x64 便携包使用 `npm run package:portable` 构建，构建机需要已安装依赖、Node.js 和 Go。ZIP 输出至 `artifacts/`，附 SHA-256 校验文件。解压后直接执行 `model-opt-worker.exe` 或 `model-lod-worker.exe`，目标机器无需安装 Node.js、npm 或 Go。必须保留同目录的 `app/` 和 `runtime/`，其中包含运行时及原生依赖；这不是单文件 EXE。参数与 npm 安装版相同。
+
 ## 单 GLB 与传统模型目录
 
 ```bash
