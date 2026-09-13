@@ -8,6 +8,7 @@ export async function packGLB(graph: ResourceGraph, path: string): Promise<Buffe
   const json = structuredClone(source), buffers = await gltfBuffers(graph, path, source);
   const parts: Buffer[] = [], offsets: number[] = [], virtual: JSONObject[] = [], physical: JSONObject[] = [];
   const indices: number[] = [];
+  const bufferOffsets = new Map<string, number>();
   let length = 0;
   const append = (bytes: Buffer): number => {
     const padding = (8 - length % 8) % 8;
@@ -25,7 +26,10 @@ export async function packGLB(graph: ResourceGraph, path: string): Promise<Buffe
       virtual.push(buffer);
     } else {
       physical.push(buffer);
-      indices[index] = 0; offsets[index] = append(buffers[index]!);
+      const bytes = buffers[index]!, key = await sha256Buffer(bytes);
+      let offset = bufferOffsets.get(key);
+      if (offset === undefined) { offset = append(bytes); bufferOffsets.set(key, offset); }
+      indices[index] = 0; offsets[index] = offset;
     }
   }
   const remap = (value: JSONObject): void => {

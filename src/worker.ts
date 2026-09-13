@@ -32,7 +32,7 @@ import type {
   WorkerReport,
 } from "./types.js";
 
-const WORKER_VERSION = "0.3.0";
+const WORKER_VERSION = "0.3.1";
 const TOOLCHAIN_NAME = "meshoptimizer-gltf-transform";
 const TOOLCHAIN_VERSION = `worker-${WORKER_VERSION}+@gltf-transform@4.5.0+draco3dgltf@1.5.7+meshoptimizer@1.2.0`;
 

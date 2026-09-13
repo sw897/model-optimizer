@@ -94,7 +94,9 @@ prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath
 
 对标准瓦片目录，优化器递归读取 external tileset、glTF/GLB、buffer、纹理和 schema。支持输入根内相对 URI 与 glTF data URI；远程资源应先归集。循环引用、损坏范围、外部路径、冲突输出在发布前失败。
 
-共享几何按源资源、缓冲区间、accessor 布局与编码策略归集；不同内容引用同一输出 buffer。首版保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。没有自行实现减面或压缩算法。
+共享几何按源缓冲内容哈希归集，不因文件名不同重复编码；区间按原始字节及编码布局去重，accessor 的名称、extras 等语义信息仍分别保留。输出 buffer 使用内容哈希路径，相同压缩区间也共享虚拟解码空间。预先索引 accessor 和索引视图，避免对每个 bufferView 反复扫描整个模型。保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。
+
+资源归集不把不同来源缓冲中仅部分相同的数据集中成全场景大文件，避免扩大单个 tile 的下载范围。GLB 封装会合并完全相同的物理缓冲，但仍是每个 GLB 自包含，不引入跨 GLB 外部依赖。不同烘焙坐标不会当作重复数据合并，去重不等于减面或更有损的几何压缩。
 
 纹理按源内容、颜色用途、编码参数缓存。底色/自发光使用颜色编码，法线/数据使用线性 UASTC。相同图像同时用于颜色和数据时输出不同变体。转换 WebP/AVIF 来源时同步清理已替换的 codec 引用与声明。feature-ID/property 纹理保留原始无损字节及所需 codec，材质纹理独立优化，避免改变对象 ID。
 

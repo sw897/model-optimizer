@@ -13,6 +13,34 @@ afterEach(async () => { for (const root of roots.splice(0)) await rm(root, {recu
 const options = (input: string, output: string) => ({input,output,json:false,verbose:false,help:false,version:false});
 
 describe("standard tileset optimizer", () => {
+  it("shares equal buffers across filenames and equal encoded ranges across accessor metadata", async () => {
+    const { root, input } = await fixture();
+    await writeFile(join(input, "resources/renamed.bin"), await readFile(join(input, "resources/insulator.bin")));
+    const source = join(input, "content/b.gltf");
+    const json = JSON.parse(await readFile(source, "utf8"));
+    json.buffers[0].uri = "../resources/renamed.bin";
+    json.bufferViews.push({ ...json.bufferViews[0] });
+    json.accessors.push({ ...json.accessors[0], bufferView: 6, name: "distinct accessor identity", extras: { owner: "b" } });
+    json.meshes[0].primitives[0].attributes.POSITION = 4;
+    await writeJSON(source, json);
+    const encode = vi.spyOn(MeshoptEncoder, "encodeGltfBuffer");
+    try {
+      const output = join(root, "web");
+      const report = await runOptimizer(options(input, output));
+      expect(encode).toHaveBeenCalledTimes(6);
+      expect(report.geometryResources).toBe(3);
+      expect(report.featureValidation).toEqual({ assets: 2, featureSets: 2, instances: 4, propertyRows: 4 });
+      const graph = await loadResourceGraph(output);
+      const a = graph.documents.get("content/a.gltf")!, b = graph.documents.get("content/b.gltf")!;
+      expect(a.buffers[0].uri).toBe(b.buffers[0].uri);
+      expect(a.buffers[1].uri).not.toBe(b.buffers[1].uri);
+      expect(b.bufferViews[6]).toEqual(b.bufferViews[0]);
+      expect(b.accessors[4]).toEqual(json.accessors[4]);
+      expect(b.meshes).toEqual(json.meshes);
+      expect(b.nodes).toEqual(json.nodes);
+      expect(b.extensions.EXT_structural_metadata).toEqual(json.extensions.EXT_structural_metadata);
+    } finally { encode.mockRestore(); }
+  });
   it("shares external geometry, preserves per-instance features and exact positions, and strips build inputs", async () => {
     const {root,input} = await fixture();
     const output = join(root,"web");

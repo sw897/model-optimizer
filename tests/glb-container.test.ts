@@ -30,6 +30,24 @@ async function fixture(): Promise<{ root: string; json: JSONObject }> {
 }
 
 describe("standalone GLB container", () => {
+  it("embeds equal physical buffers only once without changing accessor identities", async () => {
+    const { root, json } = await fixture();
+    await writeFile(join(root, "duplicate.bin"), positions);
+    json.buffers.push({ uri: "duplicate.bin", byteLength: positions.length });
+    json.bufferViews.push({ buffer: 1, byteLength: positions.length });
+    json.accessors.push({ ...json.accessors[0], bufferView: 1, name: "separate semantic" });
+    json.meshes.push({ primitives: [{ attributes: { POSITION: 1 } }] });
+    json.nodes.push({ mesh: 1, translation: [9, 8, 7] });
+    json.scenes[0].nodes.push(1);
+    await writeJSON(join(root, "tower.gltf"), json);
+    const packed = parseGLB(await packGLB(await loadResourceGraph(root, "tower.gltf"), "tower.gltf"), "tower.glb");
+    expect(packed.json.buffers[0].byteLength).toBe(positions.length);
+    expect(packed.json.bufferViews[0]).toEqual(packed.json.bufferViews[1]);
+    expect(packed.binary!.subarray(0, positions.length)).toEqual(positions);
+    expect(packed.json.accessors).toEqual(json.accessors);
+    expect(packed.json.nodes).toEqual(json.nodes);
+    expect(packed.json.meshes).toEqual(json.meshes);
+  });
   it("embeds multiple buffers and images without changing scene transforms or materials", async () => {
     const { root, json } = await fixture();
     const indices = Buffer.from(new Uint16Array([0, 1, 2]).buffer);

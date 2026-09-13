@@ -1,4 +1,5 @@
 import { link, lstat, mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { basename, dirname, extname, join, posix, resolve } from "node:path";
 import { MeshoptEncoder, MeshoptDecoder } from "meshoptimizer";
 import { Logger } from "@gltf-transform/core";
@@ -11,9 +12,9 @@ import { validateFeatureMetadata, type FeatureValidation } from "./features.js";
 import { packGLB } from "./glb-container.js";
 import { rewritePublicationManagement } from "./publication-index.js";
 
-export const OPTIMIZER_VERSION = "0.3.0";
+export const OPTIMIZER_VERSION = "0.3.1";
 export const OPTIMIZATION_PROFILE = "web-v1" as const;
-interface BufferPlan { source: string; parts: Buffer[]; size: number; ranges: Map<string, { offset: number; length: number }>; path: string }
+interface BufferPlan { parts: Buffer[]; size: number; ranges: Map<string, { offset: number; length: number }>; path: string }
 interface AssetResult { source: string; path: string; json: JSONObject; plans: BufferPlan[] }
 export interface OptimizationReport {
   schema: "model-optimizer.optimization-report"; version: 3; status: "succeeded" | "failed";
@@ -177,6 +178,17 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
     const json = structuredClone(graph.documents.get(source)!);
     const buffers = await gltfBuffers(graph, source, json);
     const sourceHashes = await Promise.all(buffers.map(sha256Buffer));
+    const accessorsByView = new Map<number, JSONObject[]>();
+    for (const accessor of json.accessors ?? []) {
+      if (!Number.isInteger(accessor.bufferView)) continue;
+      const list = accessorsByView.get(accessor.bufferView) ?? [];
+      list.push(accessor); accessorsByView.set(accessor.bufferView, list);
+    }
+    const indexViews = new Set<number>();
+    for (const mesh of json.meshes ?? []) for (const primitive of mesh.primitives ?? []) {
+      const view = json.accessors?.[primitive.indices]?.bufferView;
+      if (Number.isInteger(view)) indexViews.add(view);
+    }
     const path = pathMap.get(source)!;
     const originalImageViews = new Set<number>((json.images ?? []).map((image: JSONObject) => image.bufferView).filter(Number.isInteger));
     await optimizeTextures(graph, source, path, json, buffers, getTexture, pathMap);
@@ -188,18 +200,20 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
       return index;
     };
     const fallback: JSONObject = { byteLength: 0, extensions: { EXT_meshopt_compression: { fallback: true } } };
+    const fallbackRanges = new Map<string, number>();
     let compressedViews = 0;
     for (let index = 0; index < (json.bufferViews ?? []).length; index++) {
       const view = json.bufferViews[index] as JSONObject;
       const sourceBuffer = json.buffers[view.buffer] as JSONObject | undefined;
       if (!sourceBuffer) throw new Error(`invalid bufferView buffer in ${source}`);
-      const sourceName = typeof sourceBuffer.uri === "string" && !sourceBuffer.uri.startsWith("data:") ? resourcePath(source, sourceBuffer.uri) : `${source}/buffer-${view.buffer}`;
       const raw = originalImageViews.has(index) && !retainedViews.has(index) ? Buffer.alloc(4) : readView(view, buffers, source);
-      const layout = compressionLayout(json, index, view, raw.length);
-      const key = await sha256Buffer(Buffer.concat([raw, Buffer.from(JSON.stringify({ layout, accessors: (json.accessors ?? []).filter((a: JSONObject) => a.bufferView === index).map((a: JSONObject) => ({ ...a, bufferView: 0 })) }))]));
-      const planKey = `${sourceName}\n${sourceHashes[view.buffer]}`;
+      const layout = compressionLayout(accessorsByView.get(index) ?? [], indexViews.has(index), view, raw.length);
+      const key = createHash("sha256").update(raw).update(JSON.stringify(layout) ?? "raw").digest("hex");
+      const sourceIndex = view.extensions?.EXT_meshopt_compression?.buffer ?? view.buffer;
+      const planKey = sourceHashes[sourceIndex];
+      if (!planKey) throw new Error(`invalid bufferView source in ${source}`);
       let plan = plans.get(planKey);
-      if (!plan) { plan = { source: sourceName, parts: [], size: 0, ranges: new Map(), path: "" }; plans.set(planKey, plan); }
+      if (!plan) { plan = { parts: [], size: 0, ranges: new Map(), path: "" }; plans.set(planKey, plan); }
       let range = plan.ranges.get(key);
       if (!range) {
         let encoded = raw;
@@ -216,9 +230,14 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
       }
       const targetBuffer = bufferIndex(plan);
       if (layout) {
-        fallback.byteLength += (4 - fallback.byteLength % 4) % 4;
-        view.buffer = -1; view.byteOffset = fallback.byteLength;
-        fallback.byteLength += raw.length;
+        const fallbackKey = `${targetBuffer}:${key}`;
+        let offset = fallbackRanges.get(fallbackKey);
+        if (offset === undefined) {
+          fallback.byteLength += (4 - fallback.byteLength % 4) % 4;
+          offset = Number(fallback.byteLength); fallback.byteLength += raw.length;
+          fallbackRanges.set(fallbackKey, offset);
+        }
+        view.buffer = -1; view.byteOffset = offset;
         view.extensions = { ...view.extensions, EXT_meshopt_compression: { buffer: targetBuffer, byteOffset: range.offset, byteLength: range.length, byteStride: layout.stride, count: layout.count, mode: layout.mode } };
         compressedViews++;
       } else {
@@ -237,7 +256,7 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
   }
   for (const plan of plans.values()) {
     const bytes = Buffer.concat(plan.parts), hash = await sha256Buffer(bytes);
-    plan.path = `resources/buffers/${safeName(posix.basename(plan.source))}/${hash}.bin`;
+    plan.path = `resources/buffers/${hash}.bin`;
     await writeAtomic(join(workRoot, plan.path), bytes); plan.parts = [];
   }
   for (const texture of textureCache.values()) await writeAtomic(join(workRoot, texture.path), texture.bytes);
@@ -270,7 +289,7 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
     await includeManagement(outputGraph);
   }
   for (const [path, file] of graph.files) if (await sha256File(await resolveExistingSafe(inputRoot, path)) !== file.sha256) throw new Error(`input changed during optimization: ${path}`);
-  report.geometryResources = plans.size; report.textureResources = textureCache.size;
+  report.geometryResources = new Set([...plans.values()].map(plan => plan.path)).size; report.textureResources = textureCache.size;
   return outputGraph;
 }
 
@@ -330,14 +349,12 @@ function readView(view: JSONObject, buffers: Buffer[], label: string): Buffer {
   return source.subarray(start, start + view.byteLength);
 }
 
-function compressionLayout(json: JSONObject, index: number, view: JSONObject, bytes: number): { count: number; stride: number; mode: string } | undefined {
-  const accessors = (json.accessors ?? []).filter((a: JSONObject) => a.bufferView === index);
+function compressionLayout(accessors: JSONObject[], isIndex: boolean, view: JSONObject, bytes: number): { count: number; stride: number; mode: string } | undefined {
   if (!accessors.length) return undefined;
   const components: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
   const sizes: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
   let stride = view.byteStride;
   if (!stride) { const layouts = new Set(accessors.map((a: JSONObject) => (components[a.type] ?? 0) * (sizes[a.componentType] ?? 0))); if (layouts.size !== 1) return undefined; stride = [...layouts][0]; }
-  const isIndex = (json.meshes ?? []).some((mesh: JSONObject) => mesh.primitives?.some((p: JSONObject) => p.indices !== undefined && json.accessors[p.indices]?.bufferView === index));
   if (isIndex ? ![2, 4].includes(stride) : !stride || stride % 4 || stride > 256) return undefined;
   if (bytes % stride) return undefined;
   return { count: bytes / stride, stride, mode: isIndex ? "INDICES" : "ATTRIBUTES" };
