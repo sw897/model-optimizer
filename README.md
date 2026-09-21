@@ -54,7 +54,7 @@ model-opt-worker --input ./line-a-published --output ./line-a-web
 
 `--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。同一原型遇到质量失败后停止后续级别，仅保留连续成功前缀；首级失败则保持 base-only，其他原型不受影响。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
 
-输入必须是 canonical 原型：世界组件表或 GPU 实例装配模型被拒绝。带 part feature 的原型可以进入阶段 2，但当前化简器尚不能证明逐面 part 归属和存活不变，因此保留 base-only，并在报告中记录原因；不删除 part 元数据以换取化简结果。
+输入必须是 canonical 原型：世界组件表或 GPU 实例装配模型被拒绝。带 part feature 的原型支持在单个 primitive 对应单一 part 时减面：保留属性表、part 身份和 primitive/材质边界，重映射仍被使用的顶点属性，每个 primitive 至少保留一个三角形。使用 Meshopt 米制误差门槛；共享 primitive accessor、混合 part、动画、缩放节点、压缩或其他不支持的布局保留 base-only，并记录原因，不删除身份元数据。
 
 
 ```text
@@ -108,7 +108,7 @@ prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath
 
 - 仅保留标准运行资源及发布管理资料，不携带 `_build` 或 LOD hand-off。
 - 继承 sceneId/objectKey/componentId，重写 catalog、objects、components 中的内容路径及 release 引用；保留 bounds 与真实 LOD level。
-- 从入口 catalog 发现公开组件分片，校验 root→catalog→index→shard 摘要链；优化后按 4 MiB 预算重新分片，更新摘要链和 32 位 releaseId，不从 `_build` 补查发布索引。
+- 从入口 catalog 发现公开组件分片，校验 root→catalog→index→shard 摘要链；优化后按对象边界及 4 MiB 预算重新分片，运行时 JSON 使用紧凑序列化，更新摘要链和 32 位 releaseId，不从 `_build` 补查发布索引。
 - 重新生成资源 hash、optimization-manifest v3 和报告。
 - 目录输出新建、通过校验后原子提交；失败不覆盖输入或已有发布成果。
 - 已优化输入应从原始构建/发布目录重新加工。

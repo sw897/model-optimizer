@@ -4,7 +4,10 @@ import { convertPrimitiveToTriangles, getGLPrimitiveCount, simplify, weld } from
 import draco3d from "draco3dgltf";
 import { MeshoptEncoder, MeshoptSimplifier, MeshoptDecoder } from "meshoptimizer";
 import { readFile } from "node:fs/promises";
-import { parseGLB } from "./resource-graph.js";
+import { basename, dirname } from "node:path";
+import { PartLODUnsupported, simplifyPartGLB } from "./part-lod.js";
+import { validateFeatureMetadata } from "./features.js";
+import { loadGLTFResourceGraph, parseGLB } from "./resource-graph.js";
 import { fileSize, readFirstBytes, removeIfExists, sha256Buffer, sha256File, writeAtomic } from "./fs-utils.js";
 import type { LevelReport, PresetLevel, PrototypeStats } from "./types.js";
 
@@ -109,7 +112,7 @@ export async function simplifyGLB(
   outputPathForLevel: (level: number) => string,
   levels: PresetLevel[],
 ): Promise<GLBResult> {
-  if (await prototypeHasPartFeatures(inputPath)) throw new LODQualityError("semantic-change", "part feature ownership/survival is not proven by the simplifier; preserve base-only prototype");
+  if (await prototypeHasPartFeatures(inputPath)) return simplifyPartPrototype(inputPath, outputPathForLevel, levels);
   const io = await createDecodeIO();
   const sourceDocument = await readGLB(inputPath, io);
   await MeshoptSimplifier.ready;
@@ -220,6 +223,37 @@ export async function simplifyGLB(
   }
 
   return { sourceBytes, sourceHash, sourceStats, levels: reports };
+}
+
+async function simplifyPartPrototype(inputPath: string, outputPathForLevel: (level: number) => string, levels: PresetLevel[]): Promise<GLBResult> {
+  await validateFeatureMetadata(await loadGLTFResourceGraph(dirname(inputPath), [basename(inputPath)]));
+  const source = await readFile(inputPath);
+  const reports: LevelReport[] = [];
+  const outputs: string[] = [];
+  let sourceStats: PrototypeStats | undefined;
+  const io = await createDecodeIO();
+  try {
+    for (const level of levels) {
+      const result = await simplifyPartGLB(source, level);
+      sourceStats = result.sourceStats;
+      const output = outputPathForLevel(level.level);
+      const decoded = await validateGLBBytes(result.bytes, io, output);
+      decoded.getRoot().dispose();
+      await writeAtomic(output, result.bytes);
+      outputs.push(output);
+      await validateFeatureMetadata(await loadGLTFResourceGraph(dirname(output), [basename(output)]));
+      reports.push({ level: level.level, path: output, inputBytes: source.length, outputBytes: result.bytes.length,
+        inputTriangles: result.sourceStats.triangleCount, outputTriangles: result.stats.triangleCount,
+        inputVertices: result.sourceStats.vertexCount, outputVertices: result.stats.vertexCount,
+        targetRatio: level.ratio, targetErrorMeters: level.maxErrorMeters, geometricErrorMeters: result.error,
+        method: "meshopt-simplify", sha256: await sha256Buffer(result.bytes), status: "succeeded" });
+    }
+  } catch (error) {
+    for (const output of outputs) await removeIfExists(output);
+    if (error instanceof PartLODUnsupported) throw new LODQualityError(error.message.startsWith("no-reduction") ? "no-reduction" : "semantic-change", error.message);
+    throw error;
+  }
+  return { sourceBytes: source.length, sourceHash: await sha256Buffer(source), sourceStats: sourceStats ?? await inspectGLB(inputPath), levels: reports };
 }
 
 // 在 glTF-Transform 解码前检查原始 JSON，防止未知扩展被忽略后误入减面。

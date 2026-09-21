@@ -12,7 +12,7 @@ import { validateFeatureMetadata, type FeatureValidation } from "./features.js";
 import { packGLB } from "./glb-container.js";
 import { rewritePublicationManagement } from "./publication-index.js";
 
-export const OPTIMIZER_VERSION = "0.3.1";
+export const OPTIMIZER_VERSION = "0.3.2";
 export const OPTIMIZATION_PROFILE = "web-v1" as const;
 interface BufferPlan { parts: Buffer[]; size: number; ranges: Map<string, { offset: number; length: number }>; path: string }
 interface AssetResult { source: string; path: string; json: JSONObject; plans: BufferPlan[] }
@@ -268,7 +268,7 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
       const old = resourcePath(result.source, uri);
       if (pathMap.has(old)) object[key] = relativeURI(result.path, pathMap.get(old)!);
     });
-    await writeJSONAtomic(join(workRoot, result.path), result.json); generated.add(result.path);
+    await writeJSONAtomic(join(workRoot, result.path), result.json, true); generated.add(result.path);
     report.assets.push({ prototypeId: result.source, level: 0, path: result.path, sourceBytes: graph.files.get(result.source)!.bytes, outputBytes: (await stat(join(workRoot, result.path))).size, sourceSha256: graph.files.get(result.source)!.sha256, outputSha256: await sha256File(join(workRoot, result.path)) });
   }
   for (const [source, target] of pathMap) {
@@ -278,7 +278,7 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
       const output = structuredClone(json);
       visitURIs(output, (object, key, uri) => { if (!uri.startsWith("data:")) object[key] = relativeURI(target, pathMap.get(resourcePath(source, uri))!); });
       if (output.asset?.extras) rewriteExtras(output.asset.extras, pathMap, releaseId);
-      await writeJSONAtomic(join(workRoot, target), output);
+      await writeJSONAtomic(join(workRoot, target), output, true);
     } else await copyFileChecked(await resolveExistingSafe(inputRoot, source), join(workRoot, target));
   }
   let outputGraph = report.inputKind === "tileset" ? await loadResourceGraph(workRoot) : await loadGLTFResourceGraph(workRoot, entries.map(path => pathMap.get(path)!));

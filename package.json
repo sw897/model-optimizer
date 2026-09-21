@@ -1,6 +1,6 @@
 {
   "name": "model-optimizer",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Standard 3D Tiles LOD and GLB/tileset web optimization workers",
   "type": "module",

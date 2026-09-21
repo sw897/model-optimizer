@@ -66,8 +66,8 @@ export async function writeJSON(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-export async function writeJSONAtomic(path: string, value: unknown): Promise<void> {
-  await writeAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+export async function writeJSONAtomic(path: string, value: unknown, compact = false): Promise<void> {
+  await writeAtomic(path, `${JSON.stringify(value, null, compact ? undefined : 2)}\n`);
 }
 
 export async function writeAtomic(path: string, data: Uint8Array | string): Promise<void> {

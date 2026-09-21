@@ -113,15 +113,18 @@ describe("component publication integrity", () => {
     expect(await readFile(join(root, "source.glb"))).toEqual(before);
     await expect(readFile(join(root, "lod1.glb"))).rejects.toThrow();
   });
-  it("repartitions rewritten records within the 4 MiB shard budget", async () => {
+  it.each([false, true])("repartitions records by object within the shard budget (separate=%s)", async separate => {
     const { root, input, content } = await fixture(), output = join(root, "rewrite");
-    const components = Array.from({ length: 60 }, (_, i) => ({ ...component, componentId: `wire/${String(i).padStart(3, "0")}`, displayName: "x".repeat(80_000), bounds, position: [100, 20, 0], contents: [{ path: content, level: 0 }] }));
+    const components = Array.from({ length: 60 }, (_, i) => ({ ...component, objectId: separate && i >= 30 ? "span/2" : component.objectId, objectKey: separate && i >= 30 ? "line/span/2" : component.objectKey, componentId: `wire/${String(i).padStart(3, "0")}`, displayName: "x".repeat(80_000), bounds, position: [100, 20, 0], contents: [{ path: content, level: 0 }] }));
     await writeJSON(join(input, "components/shards/0.json"), { schema: "model-optimizer.tileset-component-shard", version: 1, components });
+    const objectPath = join(input, "objects/index.json"), objects = JSON.parse(await readFile(objectPath, "utf8"));
+    if (separate) objects.objects.push({ ...objects.objects[0], objectId: "span/2", objectKey: "line/span/2" });
+    await writeJSON(objectPath, objects);
     const indexPath = join(input, "components/index.json"), index = JSON.parse(await readFile(indexPath, "utf8"));
-    index.count = 60; Object.assign(index.shards[0], { count: 60, sha256: await sha256File(join(input, "components/shards/0.json")), first: { objectKey: component.objectKey, componentId: components[0]!.componentId }, last: { objectKey: component.objectKey, componentId: components.at(-1)!.componentId }, componentTypes: { conductor: 60 } });
+    index.count = 60; Object.assign(index.shards[0], { count: 60, sha256: await sha256File(join(input, "components/shards/0.json")), first: { objectKey: component.objectKey, componentId: components[0]!.componentId }, last: { objectKey: components.at(-1)!.objectKey, componentId: components.at(-1)!.componentId }, componentTypes: { conductor: 60 } });
     await writeJSON(indexPath, index);
     const catalogPath = join(input, "_pack/catalog.json"), catalog = JSON.parse(await readFile(catalogPath, "utf8"));
-    catalog.componentIndexSHA256 = await sha256File(indexPath); await writeJSON(catalogPath, catalog);
+    catalog.objectIndexSHA256 = await sha256File(objectPath); catalog.componentIndexSHA256 = await sha256File(indexPath); await writeJSON(catalogPath, catalog);
     const tile = JSON.parse(await readFile(join(input, "tileset.json"), "utf8"));
     tile.asset.extras.catalogSHA256 = await sha256File(catalogPath); await writeJSON(join(input, "tileset.json"), tile);
     const graph = await loadResourceGraph(input); await includeManagement(graph);
@@ -130,6 +133,9 @@ describe("component publication integrity", () => {
     const result = await loadResourceGraph(output); await includeManagement(result);
     const rewritten = result.documents.get("components/index.json")!;
     expect(rewritten.shards).toHaveLength(2);
+    if (separate) for (const info of rewritten.shards) expect(info.first.objectKey).toBe(info.last.objectKey);
+    const runtimeJSON = await readFile(join(output, "tileset.json"), "utf8");
+    expect(runtimeJSON).toBe(JSON.stringify(JSON.parse(runtimeJSON)) + "\n");
     expect(rewritten.shards.reduce((sum: number, info: JSONObject) => sum + info.count, 0)).toBe(60);
     for (const info of rewritten.shards) expect((await stat(join(output, info.path))).size).toBeLessThanOrEqual(4 << 20);
   });

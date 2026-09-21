@@ -112,7 +112,7 @@ export async function rewritePublicationManagement(graph: ResourceGraph, output:
       const objects = structuredClone(graph.documents.get(catalog.objectIndex)!);
       for (const object of objects.objects) object.contents = (object.contents ?? []).map(rewrite);
       catalog.objectIndex = rewrite(catalog.objectIndex);
-      await writeJSONAtomic(join(output, catalog.objectIndex), objects);
+      await writeJSONAtomic(join(output, catalog.objectIndex), objects, true);
       catalog.objectIndexSHA256 = await sha256Buffer(await readFile(join(output, catalog.objectIndex)));
       if (catalog.componentIndex) {
         const source = graph.documents.get(catalog.componentIndex)!;
@@ -135,23 +135,23 @@ export async function rewritePublicationManagement(graph: ResourceGraph, output:
           const record = structuredClone(original);
           record.contents = record.contents.map((content: JSONObject) => ({ ...content, path: rewrite(content.path) }));
           const bytes = Buffer.byteLength(JSON.stringify(record));
-          if (size + bytes + (batch.length ? 1 : 0) > SHARD_BUDGET) await flush();
+          if (batch.length && batch[0]!.objectKey !== record.objectKey || size + bytes + (batch.length ? 1 : 0) > SHARD_BUDGET) await flush();
           size += bytes + (batch.length ? 1 : 0); batch.push(record);
         }
         await flush();
-        await writeJSONAtomic(join(output, target), index);
+        await writeJSONAtomic(join(output, target), index, true);
         catalog.componentIndex = target;
         catalog.componentIndexSHA256 = await sha256Buffer(await readFile(join(output, target)));
       }
       catalog.root = rewrite(catalog.root); catalog.releaseId = releaseId;
       for (const node of catalog.nodes ?? []) node.payloadPath = rewrite(node.payloadPath);
       const path = rewrite(extras.catalog);
-      await writeJSONAtomic(join(output, path), catalog);
+      await writeJSONAtomic(join(output, path), catalog, true);
       updated = { path, hash: await sha256Buffer(await readFile(join(output, path))), catalog }; rewritten.set(extras.catalog, updated);
     }
     const target = rewrite(entryPath), json = JSON.parse(await readFile(join(output, target), "utf8")) as JSONObject;
     Object.assign(json.asset.extras, { releaseId, catalog: updated.path, catalogSHA256: updated.hash, objectIndex: updated.catalog.objectIndex });
     if (updated.catalog.componentIndex) json.asset.extras.componentIndex = updated.catalog.componentIndex;
-    await writeJSONAtomic(join(output, target), json);
+    await writeJSONAtomic(join(output, target), json, true);
   }
 }
