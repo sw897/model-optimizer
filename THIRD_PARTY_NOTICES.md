@@ -29,6 +29,10 @@ The statically linked LLVM components use Apache-2.0 with LLVM exceptions; MinGW
 
 Node.js has its own license and bundled notices. The portable layout copies the runtime's `LICENSE`; verify that it corresponds to the exact runtime binary.
 
+The Go launchers include Go's runtime and standard library. Assembly copies the actual compiler distribution's BSD license to `runtime/Go-LICENSE` and records its digest and compiler version in the license inventory.
+
+The portable layout contains a versioned, hashed source preparation kit for Sharp/libvips and the exact matching Windows SDK. This kit is explicitly partial: embedded source/notice closure and native Windows replacement evidence remain blocked. See [native materials](docs/windows-native-redistribution.md) and [release blockers](docs/release-blockers.md). Source archives keep their upstream licenses and are separate from this project's generated examples.
+
 Before any portable release, inventory the complete production dependency tree on the target platform, include all applicable copyright/license texts and notices, provide corresponding sources as required, and retain the review with the release. See [the release checklist](docs/releasing.md).
 
 ## Examples

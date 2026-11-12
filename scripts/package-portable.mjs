@@ -7,8 +7,10 @@ import { randomUUID } from "node:crypto";
 import { createZip, extractZip, fetchPinned, requireDiskSpace, sha256 } from "./native-assets.mjs";
 import { runNpm } from "./npm.mjs";
 import { inspectWindowsTree } from "./pe.mjs";
-import { collectPortableNotices } from "./portable-notices.mjs";
+import { collectGoLicense, collectPortableNotices } from "./portable-notices.mjs";
 import { verifyPortable } from "./verify-portable.mjs";
+import { fileRecord, inventoryTree } from "./portable-integrity.mjs";
+import { prepareWindowsRedistribution } from "./prepare-windows-redistribution.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -36,14 +38,19 @@ try {
   await rm(join(app, "node_modules/.bin"), { recursive: true, force: true });
   await extractZip(nodeArchive.bytes, staging, path => path === `node-v${native.node.version}-win-x64/node.exe` || path === `node-v${native.node.version}-win-x64/LICENSE`);
   await cp(join(staging, `node-v${native.node.version}-win-x64`), join(destination, "runtime"), { recursive: true });
-  const goVersion = execFileSync("go", ["version"], { encoding: "utf8" }).trim();
+  const goEnv = { ...process.env, GOTOOLCHAIN: "local" };
+  const goVersion = execFileSync("go", ["version"], { encoding: "utf8", env: goEnv }).trim();
+  const goRoot = execFileSync("go", ["env", "GOROOT"], { encoding: "utf8", env: goEnv }).trim();
+  const go = await collectGoLicense(destination, goRoot, goVersion);
   execFileSync("go", ["build", "-trimpath", "-ldflags=-s -w -buildid=", "-o", join(destination, "model-opt-worker.exe"), join(root, "scripts/portable-launcher.go")], { cwd: root, env: { ...process.env, GOOS: "windows", GOARCH: "amd64", GOAMD64: "v1", CGO_ENABLED: "0", GOTOOLCHAIN: "local" }, stdio: "inherit" });
   await cp(join(destination, "model-opt-worker.exe"), join(destination, "model-lod-worker.exe"));
   await mkdir(join(app, "scripts"));
-  for (const file of ["test-portable.mjs", "verify-portable.mjs", "pe.mjs"]) await cp(join(root, "scripts", file), join(app, "scripts", file));
-  const packages = await collectPortableNotices(destination);
+  for (const file of ["test-portable.mjs", "verify-portable.mjs", "pe.mjs", "portable-integrity.mjs", "portable-licenses.mjs", "portable-redistribution.mjs"]) await cp(join(root, "scripts", file), join(app, "scripts", file));
+  const redistribution = await prepareWindowsRedistribution(root, destination, cache);
+  const packages = await collectPortableNotices(destination, go);
   const nativeFiles = await inspectWindowsTree(destination);
-  const manifest = { schema: "model-optimizer.windows-portable", version: 1, packageVersion: metadata.version, target: "windows-x64", minimumWindows: native.basisu["windows-x64"].minimumWindows, node: { version: native.node.version, archiveSha256: native.node["windows-x64"].sha256, binarySha256: sha256(await readFile(join(destination, "runtime/node.exe"))) }, encoder: { version: native.basisu.version, ...native.basisu["windows-x64"], source: native.basisu.source, compiler: native.basisu.compiler }, launcher: { compiler: goVersion, GOOS: "windows", GOARCH: "amd64", GOAMD64: "v1", CGO_ENABLED: "0" }, nativeFiles, productionPackages: packages.map(({ name, version }) => ({ name, version })), validation: { static: "passed", execution: "not-run" } };
+  const manifest = { schema: "model-optimizer.windows-portable", version: 2, packageVersion: metadata.version, target: "windows-x64", minimumWindows: native.basisu["windows-x64"].minimumWindows, node: { version: native.node.version, archiveSha256: native.node["windows-x64"].sha256, binarySha256: sha256(await readFile(join(destination, "runtime/node.exe"))) }, encoder: { version: native.basisu.version, ...native.basisu["windows-x64"], source: native.basisu.source, compiler: native.basisu.compiler }, launcher: { compiler: goVersion, GOOS: "windows", GOARCH: "amd64", GOAMD64: "v1", CGO_ENABLED: "0" }, nativeFiles, productionPackages: packages, licenses: await fileRecord(destination, "THIRD_PARTY_LICENSES.json"), applicationFiles: await inventoryTree(destination, "app"), validation: { static: "passed", execution: "not-run" } };
+  manifest.redistribution = redistribution;
   await writeFile(join(destination, "portable-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await verifyPortable(destination);
   await writeFile(join(destination, "使用说明.txt"), `Model Optimizer ${metadata.version} / Windows x64\r\n\r\n解压整个目录，保留 app 和 runtime。无需安装 Node.js、npm 或 Go。\r\n.\\model-opt-worker.exe --help\r\n.\\model-lod-worker.exe --help\r\n\r\nCPU Release 编码器，无需 OpenCL 或额外 VC++ DLL。最低 ${manifest.minimumWindows}。\r\n内置 Node.js ${native.node.version}。许可见 app/THIRD_PARTY_NOTICES.md 和 THIRD_PARTY_LICENSES.json。\r\n验证：.\\runtime\\node.exe .\\app\\scripts\\test-portable.mjs .\r\n`);
@@ -90,4 +97,5 @@ try {
   await writeFile(`${zip}.sha256`, `${hash}  ${name}.zip\n`);
   await writeFile(`${zip}.manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Portable ZIP: ${zip}\nSHA-256: ${hash}\nStatic validation: passed; execution: ${execution}.`);
+  console.log(`Native source materials: ${redistribution.status}; public distribution blockers: ${redistribution.blockers.map(item => item.id).join(", ")}.`);
 } finally { await rm(staging, { recursive: true, force: true }); }

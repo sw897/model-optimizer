@@ -25,7 +25,7 @@ const cli = (name, args, expected = 0) => run(npmCLI, ["exec", "--offline", "--"
 try {
   run(npmCLI, ["install", "--prefix", scratch, "--no-audit", "--no-fund", "--save-exact", tarball]);
   const installed = join(scratch, "node_modules", ...metadata.name.split("/"));
-  for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "SECURITY.md", "docs/input-specification.md", "docs/releasing.md", "docs/windows-portable.md", "native-tools.lock.json", "vendor/basisu/windows-x64/basisu.exe", "toolchain.lock.json"]) {
+  for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "SECURITY.md", "docs/input-specification.md", "docs/releasing.md", "docs/windows-portable.md", "docs/windows-native-redistribution.md", "docs/release-blockers.md", "native-tools.lock.json", "vendor/basisu/windows-x64/basisu.exe", "vendor/redistribution/windows-x64.json", "toolchain.lock.json"]) {
     assert.deepEqual(await readFile(join(installed, file)), await readFile(join(root, file)), `Missing or stale packaged file: ${file}`);
   }
   for (const name of ["model-opt-worker", "model-lod-worker"]) {

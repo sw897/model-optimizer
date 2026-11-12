@@ -48,6 +48,8 @@ On macOS, the pinned compiler and source can be downloaded, verified and rebuilt
 
 ```sh
 npm run build:encoder:windows
+# Optional Unicode/spaced cache, also useful for reproduction checks.
+npm run build:encoder:windows -- --cache-dir "artifacts/encoder rebuild 中文 cache"
 ```
 
 This command captures compiler output in `artifacts/portable-cache/encoder-build.log` and refuses to replace the reviewed binary if its SHA-256 differs. Rebuilding in a fresh source directory reproduced the reviewed binary locally. Source/compiler archives are cached under `artifacts/portable-cache/`.
@@ -58,7 +60,7 @@ Changing the compiler, flags, source or encoder binary requires a new reviewed d
 
 ## Validation levels
 
-`check:portable` unpacks the ZIP into a temporary directory and checks the recorded native inventory, hashes, PE32+/x64 architecture, ordinary/delay-loaded imports, packaged adjacent DLLs, known Windows system DLLs, license inventory and exclusion of the legacy npm encoder. It rejects debug runtime imports even if their DLL files have been removed. It also rejects unsafe ZIP paths and Windows case collisions.
+`check:portable` validates the version 2 manifest after ZIP extraction: the entire `app/` file inventory, required launchers/CLI entry scripts, installed package identities, native hashes, PE32+/x64 architecture, normal/delayed imports, adjacent dependencies, system DLLs, license records and exclusion of the legacy encoder. It parses the license inventory and checks every notice's length and SHA-256. Go's runtime license is copied from the actual compiler and recorded alongside Node/native notices. Missing executables or JavaScript, invalid/empty catalogs and absent/altered notices are rejected. Unsafe ZIP paths, Windows case collisions and debug runtime imports are rejected. Older version 1 preparation ZIPs must be regenerated.
 
 On a native Windows x64 build host, `package:portable` additionally executes the extracted ZIP's smoke check automatically. It uses the bundled Node.js runtime and launchers with empty PATH/NODE_PATH/NODE_OPTIONS. A successful run covers:
 
@@ -98,4 +100,12 @@ The final ZIP and SHA-256 sidecar are committed to `artifacts/` only after the r
 
 The encoder's permissive license texts and static runtime notices are included in its vendor directory. The package also retains Node.js licensing and inventories installed production packages in `THIRD_PARTY_LICENSES.json`.
 
-Sharp/libvips and its embedded dependencies keep their own licenses, including LGPL. Keep the exact source versions and build information with release review, and provide corresponding sources/replacement or relinking material as required. The license inventory and local smoke tests do not certify fulfillment of every third-party redistribution obligation. Public distribution remains subject to [release preparation](releasing.md).
+The build includes a hashed source preparation kit under `redistribution/`: pinned Sharp/libvips source and packaging archives, the exact matching SDK's headers/import libraries, and unclosed source/replacement checks. See [native source and replacement materials](windows-native-redistribution.md). Its current status is `partial`; integrity checks do not complete redistribution review.
+
+The stricter local readiness check is expected to fail while blockers remain:
+
+```sh
+npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip --require-release-ready
+```
+
+Sharp/libvips and embedded dependencies keep their own licenses, including LGPL. Provide corresponding source/replacement or relinking material as required for the actual binary. Public distribution remains subject to [release preparation](releasing.md) and [release blockers](release-blockers.md).

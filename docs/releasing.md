@@ -44,3 +44,5 @@ Before public portable distribution:
 5. Record that review and smoke result with the artifact and SHA-256 checksum before distribution.
 
 Keep `portable-manifest.json`, `validation-report.json` when execution has run, and SHA-256 checksums with the review. `execution: not-run` means static validation only; a Wine report is not a native Windows pass. Public distribution and complete third-party source/relinking review remain outside this local-only preparation.
+
+Follow [the current blocker record](release-blockers.md) and [native source/replacement procedure](windows-native-redistribution.md). `npm run check:portable -- <zip> --require-release-ready` fails until both native source redistribution and native Windows execution gates are closed. The default static check validates a local preparation artifact; it does not grant release approval.

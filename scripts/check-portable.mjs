@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { extractZip } from "./native-assets.mjs";
 import { verifyPortable } from "./verify-portable.mjs";
+import { assertReleaseReady } from "./portable-redistribution.mjs";
 
-if (!process.argv[2]) throw new Error("Usage: npm run check:portable -- <directory-or-zip>");
-const input = resolve(process.argv[2]);
+const args = process.argv.slice(2);
+const releaseReady = args.includes("--require-release-ready");
+const paths = args.filter(arg => arg !== "--require-release-ready");
+if (paths.length !== 1 || paths[0].startsWith("--")) throw new Error("Usage: npm run check:portable -- <directory-or-zip> [--require-release-ready]");
+const input = resolve(paths[0]);
 let temporary;
 try {
   let root = input;
@@ -17,5 +21,7 @@ try {
     root = join(temporary, entries[0].name);
   }
   const result = await verifyPortable(root);
+  if (releaseReady) assertReleaseReady(result.manifest);
   console.log(`Portable static validation passed: ${result.manifest.packageVersion}; ${result.nativeFiles} x64 PE files; resolved DLL imports; no debug runtimes.`);
+  console.log(`Native source materials: ${result.manifest.redistribution?.status ?? "not recorded"}; execution: ${result.manifest.validation.execution}.`);
 } finally { if (temporary) await rm(temporary, { recursive: true, force: true }); }

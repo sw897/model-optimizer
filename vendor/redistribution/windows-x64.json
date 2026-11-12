@@ -1,0 +1,234 @@
+{
+  "schema": "model-optimizer.windows-redistribution",
+  "version": 1,
+  "status": "partial",
+  "sharpVersion": "0.35.5",
+  "nativeBinary": {
+    "path": "app/node_modules/@img/sharp-win32-x64/lib/libvips-42.dll",
+    "sha256": "06dab07cc386748513337a31672b1d5269fbc770a14ff403080575665bf0813f"
+  },
+  "sdk": {
+    "url": "https://github.com/libvips/build-win64-mxe/releases/download/v8.18.7/vips-dev-x64-web-8.18.7-static.zip",
+    "sha256": "a736af61d3b46499760efa606e469cb14e060445b1f6fd36a1fa2e75009e1197",
+    "root": "vips-dev-8.18",
+    "binaryPath": "vips-dev-8.18/bin/libvips-42.dll"
+  },
+  "componentVersions": {
+    "aom": "3.15.1",
+    "archive": "3.8.9",
+    "cairo": "1.18.6",
+    "cgif": "0.5.4",
+    "exif": "0.6.26",
+    "expat": "2.8.5",
+    "ffi": "3.8.0",
+    "fontconfig": "2.18.3",
+    "freetype": "2.14.3",
+    "fribidi": "1.0.17",
+    "glib": "2.90.0",
+    "harfbuzz": "14.5.0",
+    "heif": "1.23.5",
+    "highway": "1.4.0",
+    "imagequant": "2.4.1",
+    "lcms": "2.19.1",
+    "mozjpeg": "0826579",
+    "pango": "1.58.2",
+    "pixman": "0.46.4",
+    "png": "1.6.58",
+    "proxy-libintl": "0.5",
+    "rsvg": "2.63.2",
+    "tiff": "4.7.2",
+    "uhdr": "2.0.2",
+    "vips": "8.18.7",
+    "webp": "1.6.0",
+    "xml2": "2.15.4",
+    "zlib-ng": "2.3.3"
+  },
+  "assets": [
+    {
+      "id": "sharp",
+      "version": "0.35.5",
+      "commit": "51a990faa26ade5586a4934ac9673c98d8893326",
+      "kind": "source",
+      "filename": "sharp-0.35.5.tar.gz",
+      "url": "https://codeload.github.com/lovell/sharp/tar.gz/51a990faa26ade5586a4934ac9673c98d8893326",
+      "sha256": "d600bcbdd550ea096a384391a474907e6aa8138f97ea472bf5228b07ae75f779",
+      "bytes": 41802569
+    },
+    {
+      "id": "sharp-libvips",
+      "version": "1.3.4",
+      "commit": "ebb95f8add54eee8bed840e3fb587e4cbec857d7",
+      "kind": "recipe",
+      "filename": "sharp-libvips-1.3.4.tar.gz",
+      "url": "https://codeload.github.com/lovell/sharp-libvips/tar.gz/ebb95f8add54eee8bed840e3fb587e4cbec857d7",
+      "sha256": "65fdb633c2d97626352a3771b7a0ce30b6a89af03d2a1238491c8b068e6b8dad",
+      "bytes": 24490
+    },
+    {
+      "id": "build-win64-mxe",
+      "version": "8.18.7",
+      "commit": "ef19ca09af2453d127453d677c849ccb37cf5694",
+      "kind": "recipe",
+      "filename": "build-win64-mxe-8.18.7.tar.gz",
+      "url": "https://codeload.github.com/libvips/build-win64-mxe/tar.gz/ef19ca09af2453d127453d677c849ccb37cf5694",
+      "sha256": "f52864572e6df6e549016369fdb2705aa195a837bd7bc8c52e45f42b59ef97a7",
+      "bytes": 65766
+    },
+    {
+      "id": "libvips",
+      "version": "8.18.7",
+      "kind": "source",
+      "filename": "vips-8.18.7.tar.xz",
+      "url": "https://github.com/libvips/libvips/releases/download/v8.18.7/vips-8.18.7.tar.xz",
+      "sha256": "5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94",
+      "bytes": 25425084
+    }
+  ],
+  "blockers": [
+    {
+      "id": "embedded-source-closure",
+      "reason": "Exact source archives and required notices for embedded LGPL/MPL libraries and their dependency closure are not yet archived; this kit contains top-level Sharp/libvips source and pinned packaging recipes only."
+    },
+    {
+      "id": "native-library-replacement",
+      "reason": "A modified ABI-compatible DLL replacement/relink and CLI smoke test has not been performed on native Windows; Wine results do not close this check."
+    }
+  ],
+  "pendingSources": [
+    {
+      "component": "aom",
+      "version": "3.15.1",
+      "status": "not-archived"
+    },
+    {
+      "component": "archive",
+      "version": "3.8.9",
+      "status": "not-archived"
+    },
+    {
+      "component": "cairo",
+      "version": "1.18.6",
+      "status": "not-archived"
+    },
+    {
+      "component": "cgif",
+      "version": "0.5.4",
+      "status": "not-archived"
+    },
+    {
+      "component": "exif",
+      "version": "0.6.26",
+      "status": "not-archived"
+    },
+    {
+      "component": "expat",
+      "version": "2.8.5",
+      "status": "not-archived"
+    },
+    {
+      "component": "ffi",
+      "version": "3.8.0",
+      "status": "not-archived"
+    },
+    {
+      "component": "fontconfig",
+      "version": "2.18.3",
+      "status": "not-archived"
+    },
+    {
+      "component": "freetype",
+      "version": "2.14.3",
+      "status": "not-archived"
+    },
+    {
+      "component": "fribidi",
+      "version": "1.0.17",
+      "status": "not-archived"
+    },
+    {
+      "component": "glib",
+      "version": "2.90.0",
+      "status": "not-archived"
+    },
+    {
+      "component": "harfbuzz",
+      "version": "14.5.0",
+      "status": "not-archived"
+    },
+    {
+      "component": "heif",
+      "version": "1.23.5",
+      "status": "not-archived"
+    },
+    {
+      "component": "highway",
+      "version": "1.4.0",
+      "status": "not-archived"
+    },
+    {
+      "component": "imagequant",
+      "version": "2.4.1",
+      "status": "not-archived"
+    },
+    {
+      "component": "lcms",
+      "version": "2.19.1",
+      "status": "not-archived"
+    },
+    {
+      "component": "mozjpeg",
+      "version": "0826579",
+      "status": "not-archived"
+    },
+    {
+      "component": "pango",
+      "version": "1.58.2",
+      "status": "not-archived"
+    },
+    {
+      "component": "pixman",
+      "version": "0.46.4",
+      "status": "not-archived"
+    },
+    {
+      "component": "png",
+      "version": "1.6.58",
+      "status": "not-archived"
+    },
+    {
+      "component": "proxy-libintl",
+      "version": "0.5",
+      "status": "not-archived"
+    },
+    {
+      "component": "rsvg",
+      "version": "2.63.2",
+      "status": "not-archived"
+    },
+    {
+      "component": "tiff",
+      "version": "4.7.2",
+      "status": "not-archived"
+    },
+    {
+      "component": "uhdr",
+      "version": "2.0.2",
+      "status": "not-archived"
+    },
+    {
+      "component": "webp",
+      "version": "1.6.0",
+      "status": "not-archived"
+    },
+    {
+      "component": "xml2",
+      "version": "2.15.4",
+      "status": "not-archived"
+    },
+    {
+      "component": "zlib-ng",
+      "version": "2.3.3",
+      "status": "not-archived"
+    }
+  ]
+}
