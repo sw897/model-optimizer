@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible CLI or asset-processing problem
+body:
+  - type: markdown
+    attributes:
+      value: Use a synthetic example and remove private paths, coordinates and business data. Report vulnerabilities privately as described in SECURITY.md.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Package version, OS, CPU architecture and Node.js version.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: CLI command, input kind and a minimal generated fixture or script.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include relevant redacted stderr or report fields.
+    validations:
+      required: true

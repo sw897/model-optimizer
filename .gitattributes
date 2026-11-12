@@ -1,0 +1,4 @@
+# Preserve upstream license/copyright texts byte-for-byte, including whitespace.
+vendor/basisu/windows-x64/licenses/* -text -whitespace
+vendor/licenses/*.txt -text -whitespace
+vendor/licenses/sharp-libvips-NOTICES.md -text -whitespace

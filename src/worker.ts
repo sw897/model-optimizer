@@ -19,6 +19,7 @@ import {
 import { inspectGLB, LODQualityError, simplifyGLB, validateGLB } from "./glb.js";
 import { getPreset } from "./presets.js";
 import { copyCanonicalScene, loadInputSnapshot } from "./protocol.js";
+import { VERSION, DEPENDENCIES } from "./version.js";
 import type {
   CLIOptions,
   InputSnapshot,
@@ -32,9 +33,8 @@ import type {
   WorkerReport,
 } from "./types.js";
 
-const WORKER_VERSION = "0.3.2";
 const TOOLCHAIN_NAME = "meshoptimizer-gltf-transform";
-const TOOLCHAIN_VERSION = `worker-${WORKER_VERSION}+@gltf-transform@4.5.0+draco3dgltf@1.5.7+meshoptimizer@1.2.0`;
+const TOOLCHAIN_VERSION = `worker-${VERSION}+@gltf-transform@${DEPENDENCIES["@gltf-transform/core"]}+draco3dgltf@${DEPENDENCIES.draco3dgltf}+meshoptimizer@${DEPENDENCIES.meshoptimizer}`;
 
 export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
   const inputRoot = resolve(options.input);
@@ -264,7 +264,7 @@ async function processPrototype(
     inputSha256: baseSha256,
     method: "meshopt-simplify",
     tool: "meshoptimizer",
-    toolVersion: "1.2.0",
+    toolVersion: DEPENDENCIES.meshoptimizer!,
   }));
   ensureMonotonicErrors(lods, prototype.prototypeId);
   return {

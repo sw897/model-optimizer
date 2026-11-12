@@ -1,17 +1,29 @@
 import { createRequire } from "node:module";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 import { arch, platform, tmpdir } from "node:os";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
 import { pathExists } from "./fs-utils.js";
+import { NATIVE_TOOLS } from "./native-tools.js";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const execFile = promisify(execFileCallback);
 export type TextureUsage = "color" | "data" | "normal";
 
 export async function findBasisuBinary(): Promise<string> {
+  if (platform() === "win32") {
+    if (arch() !== "x64") throw new Error(`Release BasisU is not bundled for Windows ${arch()}`);
+    const expected = NATIVE_TOOLS.basisu["windows-x64"];
+    const binary = fileURLToPath(new URL(`../${expected.path}`, import.meta.url));
+    if (createHash("sha256").update(await readFile(binary)).digest("hex") !== expected.sha256) {
+      throw new Error("Release BasisU SHA-256 mismatch; use the reviewed binary from this package");
+    }
+    return binary;
+  }
   const packageRoot = dirname(require.resolve("basisu/package.json"));
   const platformName = platform() === "win32" ? "win" : platform();
   const extension = platformName === "win" ? ".exe" : "";

@@ -11,8 +11,10 @@ import type { OptimizationCLIOptions, OptimizationInputKind } from "./types.js";
 import { validateFeatureMetadata, type FeatureValidation } from "./features.js";
 import { packGLB } from "./glb-container.js";
 import { rewritePublicationManagement } from "./publication-index.js";
+import { VERSION, DEPENDENCIES } from "./version.js";
+import { TEXTURE_ENCODER_ID } from "./native-tools.js";
 
-export const OPTIMIZER_VERSION = "0.3.2";
+export const OPTIMIZER_VERSION = VERSION;
 export const OPTIMIZATION_PROFILE = "web-v1" as const;
 interface BufferPlan { parts: Buffer[]; size: number; ranges: Map<string, { offset: number; length: number }>; path: string }
 interface AssetResult { source: string; path: string; json: JSONObject; plans: BufferPlan[] }
@@ -26,6 +28,7 @@ export interface OptimizationReport {
   featureValidation?: FeatureValidation;
   preservedExtensions?: string[];
   inputKind: OptimizationInputKind;
+  textureEncoder: string;
 }
 
 export async function runOptimizer(options: OptimizationCLIOptions): Promise<OptimizationReport> {
@@ -43,9 +46,9 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
     await ensureDirectoryEmpty(outputRoot);
     if (output) await removeIfExists(outputRoot);
   }
-  const releaseId = (await sha256Buffer(Buffer.from(`${graph.hash}\n${OPTIMIZER_VERSION}\nmeshoptimizer@1.2.0\nbasisu@1.16.3\n${OPTIMIZATION_PROFILE}`))).slice(0, 32);
+  const releaseId = (await sha256Buffer(Buffer.from(`${graph.hash}\n${OPTIMIZER_VERSION}\n${JSON.stringify(DEPENDENCIES)}\n${TEXTURE_ENCODER_ID}\n${OPTIMIZATION_PROFILE}`))).slice(0, 32);
   const workRoot = await createTemporarySibling(outputRoot);
-  const report: OptimizationReport = { schema: "model-optimizer.optimization-report", version: 3, status: "failed", profile: OPTIMIZATION_PROFILE, inputKind: kind, inputRoot, outputRoot, inputSceneHash: graph.hash, releaseId, startedAt: new Date().toISOString(), assets: [], geometryResources: 0, textureResources: 0, compressedViews: 0, inputBytes: [...graph.files.values()].reduce((sum, file) => sum + file.bytes, 0), outputBytes: 0 };
+  const report: OptimizationReport = { schema: "model-optimizer.optimization-report", version: 3, status: "failed", profile: OPTIMIZATION_PROFILE, inputKind: kind, textureEncoder: TEXTURE_ENCODER_ID, inputRoot, outputRoot, inputSceneHash: graph.hash, releaseId, startedAt: new Date().toISOString(), assets: [], geometryResources: 0, textureResources: 0, compressedViews: 0, inputBytes: [...graph.files.values()].reduce((sum, file) => sum + file.bytes, 0), outputBytes: 0 };
   const pathMap = new Map<string, string>();
   for (const path of input.resources) pathMap.set(path, kind === "tileset" ? path
     .replace(/^releases\/[^/]+\//, `releases/${releaseId}/`)
@@ -61,7 +64,7 @@ export async function runOptimizer(options: OptimizationCLIOptions): Promise<Opt
       await link(join(output.root, report.assets[0]!.path), outputRoot);
       await removeIfExists(workRoot);
     } else {
-      await writeJSONAtomic(join(output.root, "optimization-manifest.json"), { schema: "model-optimizer.optimization-manifest", version: 3, profile: OPTIMIZATION_PROFILE, stage: "publication", inputKind: kind, inputHash: graph.hash, outputHash: output.hash, releaseId, assets: report.assets, toolchain: { version: OPTIMIZER_VERSION, meshoptimizer: "1.2.0", gltfTransform: "4.5.0", basisu: "1.16.3" } });
+      await writeJSONAtomic(join(output.root, "optimization-manifest.json"), { schema: "model-optimizer.optimization-manifest", version: 3, profile: OPTIMIZATION_PROFILE, stage: "publication", inputKind: kind, inputHash: graph.hash, outputHash: output.hash, releaseId, assets: report.assets, toolchain: { version: OPTIMIZER_VERSION, meshoptimizer: DEPENDENCIES.meshoptimizer, gltfTransform: DEPENDENCIES["@gltf-transform/core"], basisu: DEPENDENCIES.basisu, sharp: DEPENDENCIES.sharp, textureEncoder: TEXTURE_ENCODER_ID } });
       await writeJSONAtomic(join(output.root, "optimization-report.json"), report);
       await commitDirectory(output.root, outputRoot);
       if (kind !== "tileset") await removeIfExists(workRoot);
@@ -161,7 +164,7 @@ async function optimizeResourceGraph(graph: ResourceGraph, workRoot: string, pat
   const textureCache = new Map<string, { path: string; bytes: Buffer }>();
   let basisu: string | undefined;
   const getTexture = async (image: Buffer, usage: TextureUsage, name: string): Promise<string> => {
-    const key = await sha256Buffer(Buffer.concat([image, Buffer.from(`\n${usage}\n${OPTIMIZATION_PROFILE}\nbasisu@1.16.3`)]));
+    const key = await sha256Buffer(Buffer.concat([image, Buffer.from(`\n${usage}\n${OPTIMIZATION_PROFILE}\n${TEXTURE_ENCODER_ID}\nsharp@${DEPENDENCIES.sharp}`)]));
     let cached = textureCache.get(key);
     if (!cached) {
       const isKTX2 = image.subarray(0, 12).toString("hex") === "ab4b5458203230bb0d0a1a0a";

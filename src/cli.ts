@@ -4,8 +4,7 @@ import { runWorker } from "./worker.js";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CLIOptions } from "./types.js";
-
-const VERSION = "0.3.2";
+import { VERSION } from "./version.js";
 
 export function parseCLI(argv: string[]): CLIOptions {
   const values: Record<string, string | boolean | undefined> = {};

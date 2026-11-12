@@ -1,17 +1,29 @@
 {
   "name": "model-optimizer",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Standard 3D Tiles LOD and GLB/tileset web optimization workers",
   "type": "module",
   "files": [
     "dist",
     "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "docs",
+    "examples",
     "schemas",
+    "vendor",
+    "native-tools.lock.json",
     "toolchain.lock.json"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9.0"
   },
   "bin": {
     "model-lod-worker": "dist/cli.js",
@@ -19,15 +31,23 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "chmod +x dist/cli.js dist/opt-cli.js",
-    "package": "npm run build && node scripts/package-release.mjs",
-    "package:portable": "npm run build && node scripts/package-portable.mjs",
+    "postbuild": "node scripts/postbuild.mjs",
+    "package": "node scripts/package-release.mjs",
+    "package:portable": "node scripts/package-portable.mjs",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "check:release": "node scripts/check-release.mjs",
+    "test:package": "node scripts/test-package.mjs",
+    "test:portable": "node scripts/test-portable.mjs",
+    "check:portable": "node scripts/check-portable.mjs",
+    "prepare:wine": "node scripts/prepare-portable-wine.mjs",
+    "build:encoder:windows": "node scripts/build-basisu-windows.mjs",
+    "example": "node examples/generate.mjs",
+    "audit:dependencies": "node scripts/npm.mjs audit --audit-level=high",
+    "clean": "node scripts/clean.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.0",
@@ -36,12 +56,21 @@
     "basisu": "1.16.3",
     "draco3dgltf": "1.5.7",
     "meshoptimizer": "1.2.0",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@types/node": "22.15.30",
+    "fflate": "0.8.3",
     "tsx": "4.19.4",
     "typescript": "5.8.3",
-    "vitest": "3.2.4"
-  }
+    "vitest": "4.1.12"
+  },
+  "keywords": [
+    "gltf",
+    "glb",
+    "3d-tiles",
+    "meshopt",
+    "ktx2",
+    "lod"
+  ]
 }

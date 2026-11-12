@@ -1,0 +1,12 @@
+{
+  "schema": "model-optimizer.wine-runner",
+  "version": 1,
+  "qemu": {
+    "version": "10.0.13",
+    "debianVersion": "1:10.0.13+ds-0+deb13u1",
+    "url": "https://deb.debian.org/debian/pool/main/q/qemu/qemu-user_10.0.13+ds-0+deb13u1_arm64.deb",
+    "sha256": "c73711af02b97cd5e2667e735d9c06890c57165517110ca4e646c95a7083158d",
+    "binarySha256": "9af86352fd463ad9ec25bdd6a4b891ac6b6a7f3d46a7db3da6f23e2c09094a59",
+    "cpu": "Nehalem"
+  }
+}

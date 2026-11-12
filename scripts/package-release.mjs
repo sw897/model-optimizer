@@ -1,25 +1,19 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { runNpm } from "./npm.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactRoot = join(projectRoot, "artifacts");
 
+await runNpm(["run", "build"], projectRoot);
+await runNpm(["run", "check:release"], projectRoot);
 await mkdir(artifactRoot, { recursive: true });
 const packageMetadata = JSON.parse(await readFile(join(projectRoot, "package.json"), "utf8"));
 const packageFilename = `${packageMetadata.name.replace(/^@/, "").replaceAll("/", "-")}-${packageMetadata.version}.tgz`;
 
-await new Promise((resolvePromise, reject) => {
-  const child = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--pack-destination", artifactRoot], {
-    cwd: projectRoot,
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
-  child.on("error", reject);
-  child.on("exit", (code) => (code === 0 ? resolvePromise() : reject(new Error(`npm pack exited with ${code}`))));
-});
+await runNpm(["pack", "--pack-destination", artifactRoot], projectRoot);
 
 const tarball = join(artifactRoot, packageFilename);
 const hash = createHash("sha256").update(await readFile(tarball)).digest("hex");

@@ -3,8 +3,8 @@
   "version": 1,
   "name": "meshoptimizer-gltf-transform",
   "worker": "model-optimizer",
-  "workerVersion": "0.3.1",
-  "node": ">=20",
+  "workerVersion": "0.3.3",
+  "node": ">=20.9.0",
   "packages": {
     "@gltf-transform/core": "4.5.0",
     "@gltf-transform/extensions": "4.5.0",
@@ -12,7 +12,7 @@
     "basisu": "1.16.3",
     "draco3dgltf": "1.5.7",
     "meshoptimizer": "1.2.0",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   },
   "method": "meshopt-simplify",
   "optimization": {
@@ -20,6 +20,7 @@
     "geometryCompression": "meshopt",
     "textureCompression": "ktx2",
     "textureEncoder": "basisu@1.16.3",
+    "nativeToolsLock": "native-tools.lock.json",
     "positionPrecision": "lossless",
     "resourceModel": "standard-tileset-shared-buffers"
   }

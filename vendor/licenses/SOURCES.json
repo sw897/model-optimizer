@@ -1,0 +1,32 @@
+{
+  "schema": "model-optimizer.native-license-sources",
+  "version": 1,
+  "files": [
+    {
+      "path": "vendor/licenses/GPL-3.0.txt",
+      "source": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/licenses/LGPL-3.0.txt",
+      "source": "https://www.gnu.org/licenses/lgpl-3.0.txt",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/licenses/draco3dgltf-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/google/draco/1.5.7/LICENSE",
+      "sha256": "d3709b0fb4b8a94bbb1d02b8a2e484f258b0d9c5c5a01f940391f3fe662cd1a4"
+    },
+    {
+      "path": "vendor/licenses/sharp-libvips-NOTICES.md",
+      "source": "https://raw.githubusercontent.com/lovell/sharp-libvips/v1.3.4/THIRD-PARTY-NOTICES.md",
+      "sha256": "6f0d5086e3bcbee12bcdacf5878b31d1104002aeecaeb241d3fff466108082fe"
+    },
+    {
+      "path": "vendor/licenses/libvips-LGPL-2.1.txt",
+      "source": "https://github.com/libvips/build-win64-mxe/releases/download/v8.18.7/vips-dev-x64-web-8.18.7.zip",
+      "archiveSha256": "3a122eb3d588690008216f786338e2f9329dba3c3c2768b5933cf7299d549241",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+    }
+  ]
+}

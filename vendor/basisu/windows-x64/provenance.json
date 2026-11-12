@@ -1,0 +1,49 @@
+{
+  "schema": "model-optimizer.encoder-provenance",
+  "version": 1,
+  "tool": {
+    "version": "1.16.3",
+    "source": {
+      "commit": "1531cfaf9ed5232248a0a45736686a849ca3befc",
+      "url": "https://codeload.github.com/BinomialLLC/basis_universal/tar.gz/1531cfaf9ed5232248a0a45736686a849ca3befc",
+      "sha256": "49f8650808519406c1de7caa3d4273987012dacb915e954e5dd8099151def563"
+    },
+    "compiler": {
+      "name": "llvm-mingw",
+      "version": "20261104",
+      "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20261104/llvm-mingw-20261104-ucrt-macos-universal.tar.xz",
+      "sha256": "66cbd5178c4a71b0d473e68ede172f8eb7d15d023e67f39201d0a69e21f6bf3c"
+    },
+    "windows-x64": {
+      "path": "vendor/basisu/windows-x64/basisu.exe",
+      "sha256": "602f9435d65bddefb5bae3145876f23325c56217c50ae84d1941a76a8868fa49",
+      "profile": "release-cpu-static-utf8-sse-off-zstd-on",
+      "processManifestSha256": "937c65b2e9b21508b873e19d5e3ce9613fa2793829a12674729c88528846ac30",
+      "minimumWindows": "Windows 10 version 1903",
+      "configuration": "Release",
+      "opencl": false,
+      "sse41": false,
+      "cxxRuntime": "static",
+      "activeCodePage": "UTF-8"
+    }
+  },
+  "cmake": "4.4.3",
+  "clang": "23.1.5",
+  "sourceModified": false,
+  "buildOptions": [
+    "CMAKE_BUILD_TYPE=Release",
+    "STATIC=ON",
+    "SSE=OFF",
+    "OPENCL=OFF",
+    "CMAKE_DISABLE_FIND_PACKAGE_OpenCL=ON",
+    "ZSTD=ON",
+    "-O2",
+    "-DNDEBUG",
+    "-ffile-prefix-map=<source>=basis_universal",
+    "-fmacro-prefix-map=<source>=basis_universal",
+    "-Wl,--no-insert-timestamp",
+    "-Wl,-s",
+    "RT_MANIFEST=1: UTF-8 activeCodePage and longPathAware"
+  ],
+  "rebuildVerified": true
+}

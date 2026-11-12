@@ -1,0 +1,151 @@
+# Model Optimizer
+
+面向 GLB 和标准 3D Tiles 的离线优化工具，提供两个独立 CLI。运行环境为 Node.js ≥20.9.0，开发建议使用当前维护中的 Node.js LTS。
+
+[English](README.md) · [Apache-2.0](LICENSE) · [贡献指南](CONTRIBUTING.md)
+
+当前 `0.3.3` 是本地准备版本，尚未公开发布。`private: true` 保留 npm 发布锁；下文的安装包均可在本地构建。
+
+- `model-lod-worker`：读取 lod-input 的 `_build` 构建资料，用 glTF-Transform + MeshoptSimplifier 生成组件 LOD。
+- `model-opt-worker`：自动识别单个 GLB、传统模型目录或标准 `tileset.json` 资源图，用 Meshopt 无损缓冲压缩和 BasisU/KTX2 材质纹理压缩优化网络与 GPU 资源。
+
+
+## 安装与打包
+
+```bash
+npm ci
+npm run build
+npm run lint
+npm test
+npm run package
+npm run test:package
+```
+
+发行包包含 dist、协议 schema、双语文档、许可证、样例生成器和工具链版本清单。npm tarball 不捆绑 Node.js 或 node_modules；安装时仍需获取依赖。完整依赖版本由源码的 package-lock.json 锁定，工具链清单描述直接运行依赖。
+
+本地安装：`npm install -g ./artifacts/model-optimizer-0.3.3.tgz`。安装包后通过两个 bin 命令运行；源码目录可用 `node dist/cli.js` 与 `node dist/opt-cli.js`。
+
+Windows x64 便携包可在 macOS、Linux 或 Windows 上使用 `npm run package:portable` 构建，需要 Node.js 和 Go。包内使用已审查的 CPU-only Release 编码器、锁定的 Windows Node.js 及目标平台原生依赖，排除旧 npm 编码器及其调试 DLL。用 `npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip` 检查实际 ZIP；Windows 构建机还会自动执行解压后冒烟检查，其他环境如实记录验证级别。详见 [Windows 构建与验证](docs/windows-portable.md) 和 [发行准备](docs/releasing.md)。解压后保留 app/ 与 runtime/，无需另装 Node.js、npm 或 Go。
+
+macOS/Linux 可先运行 `npm run prepare:wine` 准备本地 Docker 验证镜像，再使用 `npm run package:portable -- --wine-image model-optimizer-wine:local` 执行兼容性检查。ARM 主机使用锁定版本的 QEMU；结果标记为 Wine，原生 Windows 验收单独记录。
+
+## 可复现样例
+
+```bash
+npm run example
+node dist/opt-cli.js -i artifacts/example/model.glb -o artifacts/example/model-web.glb --json
+node dist/opt-cli.js -i artifacts/example/tileset -o artifacts/example/tileset-web --json
+node dist/cli.js -i artifacts/example/lod-input -o artifacts/example/lod --max-level 1 --json
+```
+
+样例由程序生成几何和贴图，随项目按 Apache-2.0 授权，无需业务数据或外部模型。生成目标必须不存在；可用 `npm run example -- <新目录>` 指定其他路径。输入说明见 [examples/README.md](examples/README.md)。
+
+## 单 GLB 与传统模型目录
+
+```bash
+model-opt-worker -i ./models/sample.glb -o ./web/sample.glb --json
+model-opt-worker -i ./models -o ./models-web --json
+```
+
+`--input/-i` 与 `--output/-o` 决定输入、输出，输入形态自动识别：
+
+| 输入 | 输出 | 定位资料与报告 |
+|---|---|---|
+| 单个 `.glb` 文件 | 自包含 `.glb` 文件，文件名可不同 | 仅写目标 GLB；`--json` 将报告输出到标准输出 |
+| 根目录没有 `tileset.json` 的传统模型目录 | 递归优化每个 GLB，保留全部相对路径和文件名 | 其他普通文件原字节复制，包括 `offset.json`；增加优化清单和报告 |
+| 根目录含 `tileset.json` 的标准瓦片目录 | 按可达资源图生成独立发布目录 | 更新运行资源、管理索引、优化清单和报告，详见下文 |
+
+
+优化固定采用 `web-v1`：几何缓冲无损 Meshopt 编码，材质纹理采用 BasisU/KTX2。不减面、不生成 LOD，不改坐标、节点变换或顶点/索引数值；纹理压缩不是像素无损。单文件输出将缓冲和纹理嵌入 GLB，不依赖额外资源文件。
+
+输出 GLB 必须不存在；输出目录必须不存在或为空。目录输入输出不能相交，目录内不接受符号链接。已有 `asset.extras.modelOptimizer` 标记的 GLB 会被拒绝，重新优化应使用原始输入。
+
+
+## 3D Tiles：基础模型无需 LOD
+
+```bash
+model-opt-worker --input ./line-a-build --output ./line-a-web
+```
+
+
+## 构建 LOD
+
+```bash
+model-lod-worker --input ./line-a-build --output ./line-a-lod --preset tower-v1 --max-level 2
+model-opt-worker --input ./line-a-published --output ./line-a-web
+```
+
+`--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。同一原型遇到质量失败后停止后续级别，仅保留连续成功前缀；首级失败则保持 base-only，其他原型不受影响。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
+
+输入必须是 canonical 原型：世界组件表或 GPU 实例装配模型被拒绝。带 part feature 的原型支持在单个 primitive 对应单一 part 时减面：保留属性表、part 身份和 primitive/材质边界，重映射仍被使用的顶点属性，每个 primitive 至少保留一个三角形。使用 Meshopt 米制误差门槛；共享 primitive accessor、混合 part、动画、缩放节点、压缩或其他不支持的布局保留 base-only，并记录原因，不删除身份元数据。
+
+
+```text
+_build/assets/prototypes/<物理来源>/<模型>.glb
+_build/assets/prototypes/<物理来源>/<模型>/lod1.glb
+_build/assets/prototypes/<物理来源>/<模型>/lod2.glb
+lod-manifest.json
+lod-worker-report.json
+toolchain.lock.json
+```
+
+## 阶段 1 / 2 契约
+
+`_build/build-manifest.json` 使用 `model-optimizer.lod-input` v1：
+
+```json
+{
+  "schema": "model-optimizer.lod-input",
+  "version": 1,
+  "sceneId": "line-a",
+  "sourceHash": "<source hash>",
+  "prototypeManifest": "_build/prototypes.json",
+  "instanceManifest": "_build/instances.jsonl",
+  "objectIndex": "objects/index.json",
+  "layout": "_build/spatial-layout.json",
+  "files": [{"path": "tileset.json", "sha256": "<sha256>"}]
+}
+```
+
+全部路径相对输入根。files 覆盖公开运行资源、构建清单、基础 GLB；不包含 build-manifest 自身及非权威报告。worker 验证资源闭包与每个文件 hash，拒绝路径逃逸和外部 symlink。
+
+prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath、role；assetPath 为 `_build/assets/prototypes/<assetKey>`，baseGLB 为同名 `.glb`，初始 lods 为空。
+
+阶段 2 输出 `model-optimizer.lod-manifest` v3，使用 baseBuildManifestHash、basePrototypeManifestHash、sceneId 绑定输入；每个原型含 status、可选 reason、baseSha256 和真实 lods。LOD 包含路径、SHA-256、来源 SHA-256、算法/工具版本及米制误差。schema 见 schemas/lod-manifest.schema.json。
+
+## 标准资源图优化
+
+对标准瓦片目录，优化器递归读取 external tileset、glTF/GLB、buffer、纹理和 schema。支持输入根内相对 URI 与 glTF data URI；远程资源应先归集。循环引用、损坏范围、外部路径、冲突输出在发布前失败。
+
+共享几何按源缓冲内容哈希归集，不因文件名不同重复编码；区间按原始字节及编码布局去重，accessor 的名称、extras 等语义信息仍分别保留。输出 buffer 使用内容哈希路径，相同压缩区间也共享虚拟解码空间。预先索引 accessor 和索引视图，避免对每个 bufferView 反复扫描整个模型。保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。
+
+资源归集不把不同来源缓冲中仅部分相同的数据集中成全场景大文件，避免扩大单个 tile 的下载范围。GLB 封装会合并完全相同的物理缓冲，但仍是每个 GLB 自包含，不引入跨 GLB 外部依赖。不同烘焙坐标不会当作重复数据合并，去重不等于减面或更有损的几何压缩。
+
+纹理按源内容、颜色用途、编码参数缓存。底色/自发光使用颜色编码，法线/数据使用线性 UASTC。相同图像同时用于颜色和数据时输出不同变体。转换 WebP/AVIF 来源时同步清理已替换的 codec 引用与声明。feature-ID/property 纹理保留原始无损字节及所需 codec，材质纹理独立优化，避免改变对象 ID。
+
+输入 glTF 的 JSON 扩展直接保留，包括 EXT_instance_features 和 EXT_structural_metadata；glTF-Transform 用于解码检查，不通过不了解实例 feature 的读写循环重建这些元数据。
+
+
+
+标准瓦片目录的优化输出为 publication：
+
+- 仅保留标准运行资源及发布管理资料，不携带 `_build` 或 LOD hand-off。
+- 继承 sceneId/objectKey/componentId，重写 catalog、objects、components 中的内容路径及 release 引用；保留 bounds 与真实 LOD level。
+- 从入口 catalog 发现公开组件分片，校验 root→catalog→index→shard 摘要链；优化后按对象边界及 4 MiB 预算重新分片，运行时 JSON 使用紧凑序列化，更新摘要链和 32 位 releaseId，不从 `_build` 补查发布索引。
+- 重新生成资源 hash、optimization-manifest v3 和报告。
+- 目录输出新建、通过校验后原子提交；失败不覆盖输入或已有发布成果。
+- 已优化输入应从原始构建/发布目录重新加工。
+
+## 验证
+
+`npm run lint`、`npm test`、`npm run build` 覆盖：
+
+- 标准构建 manifest、物理命名、输入 hash、确定性 LOD；
+- 不同原型各自的 LOD/base-only 和已有 Draco/Meshopt 解码；
+- 两 tile 共享几何、不同实例 feature、POSITION 字节不变；
+- 同图像不同色彩用途、无损 feature 纹理；
+- metadata 身份、管理路径、资源闭包、循环和 symlink 安全；
+- 原子输出失败与可重复优化结果。
+
+
+本项目代码和生成式样例采用 [Apache-2.0](LICENSE)；第三方依赖适用各自许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。CI 配置覆盖 macOS、Linux 和 Windows；本地通过的检查不代表其他平台已完成验证。
