@@ -1,6 +1,6 @@
 # Release preparation
 
-This checkout prepares an unreleased 0.3.3 build. `private: true` prevents npm publication. Local build, test, pack and smoke commands never upload artifacts. There is no publication workflow or configured public repository URL.
+This checkout prepares an unreleased 0.4.0 build. `private: true` prevents npm publication. Local build, test, pack and smoke commands never upload artifacts. There is no publication workflow or configured public repository URL.
 
 ## Local checks
 
@@ -29,7 +29,7 @@ Source checkouts use `package-lock.json` for the full dependency graph. The npm 
 - Review third-party notices and any sample assets. Keep LICENSE, NOTICE and dependency notices in all relevant artifacts.
 - Record actual Linux/macOS/Windows CI results. In particular, run the Windows package installation and native texture tests on Windows.
 - Review the unreleased changelog and version/toolchain consistency. Create release tags only when a release is authorized.
-- If publishing npm packages, deliberately remove `private: true`, confirm control of the `@project` scope and configure public registry access. Source publication alone does not require npm publication. These steps are outside this local preparation task.
+- If publishing npm packages, deliberately remove `private: true`, confirm control of the `model-optimizer` package name and configure registry access. Source publication alone does not require npm publication. These steps are outside this local preparation task.
 
 ## Windows portable package
 

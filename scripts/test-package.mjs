@@ -39,6 +39,7 @@ try {
   const digest = bytes => createHash("sha256").update(bytes).digest("hex");
   const report = JSON.parse(cli("model-opt-worker", ["-i", join(example, "model.glb"), "-o", join(example, "optimized.glb"), "--json"]));
   assert.equal(report.status, "succeeded");
+  assert.equal(report.schema, "model-optimizer.optimization-report");
   assert.equal(report.inputKind, "glb-file");
   const bytes = await readFile(join(example, "optimized.glb"));
   assert.equal(bytes.subarray(0, 4).toString("ascii"), "glTF");
@@ -54,10 +55,14 @@ try {
   assert.equal(tiles.inputKind, "tileset");
   const manifest = JSON.parse(await readFile(join(example, "tileset-web", "optimization-manifest.json"), "utf8"));
   assert.equal(manifest.toolchain.version, metadata.version);
+  assert.equal(manifest.schema, "model-optimizer.optimization-manifest");
   assert.equal(manifest.toolchain.sharp, metadata.dependencies.sharp);
   cli("model-lod-worker", ["-i", join(example, "lod-input"), "-o", join(example, "lod"), "--max-level", "1", "--json"]);
   const lod = JSON.parse(await readFile(join(example, "lod", "lod-worker-report.json"), "utf8"));
   assert.equal(lod.status, "succeeded");
+  assert.equal(lod.schema, "model-optimizer.lod-worker-report");
+  const lodManifest = JSON.parse(await readFile(join(example, "lod", "lod-manifest.json"), "utf8"));
+  assert.equal(lodManifest.schema, "model-optimizer.lod-manifest");
   assert.equal(lod.prototypes[0].status, "succeeded");
   assert.equal(lod.prototypes[0].lods.length, 1);
   console.log(`Installed-package smoke check passed: both bins, exit codes, GLB/directory/tileset/LOD, Meshopt/KTX2, notices and Unicode/spaced paths (${metadata.version}).`);

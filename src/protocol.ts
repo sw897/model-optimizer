@@ -12,7 +12,7 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
   if (build.schema !== "model-optimizer.lod-input" || build.version !== 1 || !build.sceneId || !build.sourceHash) {
     throw new Error("input must contain model-optimizer.lod-input v1 _build/build-manifest.json");
   }
-  if (await pathExists(resolve(root, "optimization-manifest.json"))) throw new Error("LOD input must be an unoptimized lod-input directory");
+  if (await pathExists(resolve(root, "optimization-manifest.json"))) throw new Error("LOD input must conform to the input specification and contain unoptimized base assets");
   for (const field of [build.prototypeManifest, build.instanceManifest, build.objectIndex, build.layout]) await resolveExistingSafe(root, field);
   if (!Array.isArray(build.files) || !build.files.length) throw new Error("build manifest must contain file hashes");
   const graph = await loadResourceGraph(root);
@@ -40,7 +40,7 @@ export async function loadInputSnapshot(inputRoot: string): Promise<InputSnapsho
     await prototypeHasPartFeatures(resolve(root, prototype.baseGLB));
     if (!files.has(prototype.baseGLB)) throw new Error(`build manifest does not cover prototype: ${prototype.baseGLB}`);
     if (prototype.contentSha256 && await sha256File(resolve(root, prototype.baseGLB)) !== prototype.contentSha256) throw new Error(`prototype base hash mismatch: ${prototype.prototypeId}`);
-    if (!Array.isArray(prototype.lods) || prototype.lods.length) throw new Error("lod-input prototype must contain only its base asset");
+    if (!Array.isArray(prototype.lods) || prototype.lods.length) throw new Error("LOD prototype must contain only its base asset");
   }
   return { inputRoot: root, build, buildManifestHash: await sha256File(manifestPath), prototypesPath, prototypes, prototypeManifestHash: await sha256File(prototypesPath), toolchainLockHash: await sha256File(fileURLToPath(new URL("../toolchain.lock.json", import.meta.url))) };
 }

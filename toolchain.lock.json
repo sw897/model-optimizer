@@ -3,7 +3,7 @@
   "version": 1,
   "name": "meshoptimizer-gltf-transform",
   "worker": "model-optimizer",
-  "workerVersion": "0.3.3",
+  "workerVersion": "0.4.0",
   "node": ">=20.9.0",
   "packages": {
     "@gltf-transform/core": "4.5.0",

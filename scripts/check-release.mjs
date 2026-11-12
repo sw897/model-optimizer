@@ -10,6 +10,9 @@ const lock = await readJSON("package-lock.json");
 const nativeTools = await readJSON("native-tools.lock.json");
 
 assert.equal(metadata.license, "Apache-2.0");
+assert.equal(metadata.name, "model-optimizer");
+assert.equal(lock.name, metadata.name);
+assert.equal(lock.packages[""].name, metadata.name);
 assert.equal(toolchain.worker, metadata.name);
 assert.equal(toolchain.workerVersion, metadata.version);
 assert.equal(toolchain.node, metadata.engines.node);
@@ -25,7 +28,7 @@ assert.equal(createHash("sha256").update(binary).digest("hex"), encoder.sha256, 
 assert.ok(binary.includes(Buffer.from("UTF-8</activeCodePage>")), "Windows encoder must declare its UTF-8 process code page");
 const pe = inspectPE(binary, encoder.path);
 assert.ok([...pe.imports, ...pe.delayImports].every(isWindowsSystemDLL), "Release encoder requires non-system DLLs");
-for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md", "README.zh-CN.md", "docs/releasing.md"]) {
+for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md", "README.zh-CN.md", "docs/input-specification.md", "docs/releasing.md"]) {
   assert.ok((await readFile(new URL(`../${file}`, import.meta.url), "utf8")).trim(), `Missing release document: ${file}`);
 }
 for (const entry of ["cli.js", "opt-cli.js"]) {

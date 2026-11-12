@@ -1,6 +1,6 @@
 # Security
 
-Version 0.3.3 is an unreleased local preparation build. No public support window is established yet. Use the latest reviewed dependency lockfile and a maintained Node.js LTS runtime.
+Version 0.4.0 is an unreleased local preparation build. No public support window is established yet. Use the latest reviewed dependency lockfile and a maintained Node.js LTS runtime.
 
 Report vulnerabilities through the hosting platform's private vulnerability reporting feature when available. If no private reporting channel is configured, ask the maintainer for one without disclosing exploit details in a public issue. Public vulnerability reporting must be configured before the first public release; no public security address is currently advertised.
 

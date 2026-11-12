@@ -7,7 +7,7 @@ Reserve at least 1 GiB of free space for portable assembly and 1.5 GiB for an en
 ```sh
 npm ci
 npm run package:portable
-npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip
+npm run check:portable -- artifacts/model-optimizer-0.4.0-windows-x64.zip
 ```
 
 Everything remains local. `private: true` is retained. No workflow uploads, signs, publishes or creates release tags.
@@ -69,7 +69,7 @@ On a native Windows x64 build host, `package:portable` additionally executes the
 - Generated GLB texture compression and exact decoded POSITION bytes.
 - Preservation of original inputs and occupied outputs.
 - Model directories and byte-identical auxiliary files.
-- Standard tileset optimization and real model input LOD generation.
+- Standard tileset optimization and LOD generation from specification-compliant inputs.
 - A deliberately corrupted encoder rejected without producing output, followed by restoration of the reviewed bytes.
 - Unicode/spaced paths and static validation after extraction and execution.
 
@@ -94,7 +94,7 @@ Use `--base-image <existing-local-image>` to reuse a previously built amd64 Wine
 
 The package test limits its container to 4 CPUs, 2 GiB of memory, 256 processes and bounded logs, disables networking, and removes its own container afterwards. The artifact manifest records the exact local runner image ID. A Wine report is compatibility evidence, not a substitute for native Windows verification. The CI Windows job is configured for native execution; its presence does not mean it has run.
 
-The final ZIP and SHA-256 sidecar are committed to `artifacts/` only after the requested checks succeed. Failed staging directories are removed. The ZIP preserves the complete `app/` and `runtime/` directory layout and is not a single-file executable.
+The final ZIP and SHA-256 sidecar are written to ignored `artifacts/` only after the requested checks succeed. Failed staging directories are removed. The ZIP preserves the complete `app/` and `runtime/` directory layout and is not a single-file executable.
 
 ## Redistribution
 
@@ -105,7 +105,7 @@ The build includes a hashed source preparation kit under `redistribution/`: pinn
 The stricter local readiness check is expected to fail while blockers remain:
 
 ```sh
-npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip --require-release-ready
+npm run check:portable -- artifacts/model-optimizer-0.4.0-windows-x64.zip --require-release-ready
 ```
 
 Sharp/libvips and embedded dependencies keep their own licenses, including LGPL. Provide corresponding source/replacement or relinking material as required for the actual binary. Public distribution remains subject to [release preparation](releasing.md) and [release blockers](release-blockers.md).

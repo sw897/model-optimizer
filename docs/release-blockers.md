@@ -1,6 +1,6 @@
 # Local preparation status and release blockers
 
-This records follow-up to review of local commit `a938ce9`. No push, public upload, tag or publication is authorized by this preparation work.
+This records the remaining issues from the local open-source and Windows portable review. No push, public upload, tag or publication is authorized by this preparation work.
 
 | Review item | Local implementation | Remaining work |
 | --- | --- | --- |

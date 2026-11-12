@@ -27,10 +27,22 @@ describe("model-lod worker", () => {
     expect(() => parseCLI(["--input", "in", "--output", "out", "--max-level", "-1"])).toThrow();
   });
 
+  it.each([
+    { schema: "unrecognized.lod-input", version: 1 },
+    { schema: "model-optimizer.lod-input", version: 2 },
+  ])("rejects an unsupported LOD input contract: %j", async identity => {
+    const input = await createCanonicalFixture();
+    temporaryRoots.push(input);
+    const path = join(input, "_build/build-manifest.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    await writeJSON(path, { ...manifest, ...identity });
+    await expect(loadInputSnapshot(input)).rejects.toThrow("model-optimizer.lod-input v1");
+  });
+
   it("generates deterministic LOD assets and a model manifest", async () => {
     const input = await createCanonicalFixture();
-    const output = join(input, "..", "stage2-output");
-    const outputRepeat = join(input, "..", "stage2-output-repeat");
+    const output = join(input, "..", "lod-output");
+    const outputRepeat = join(input, "..", "lod-output-repeat");
     const report = await runWorker({
       input,
       output,
@@ -45,6 +57,7 @@ describe("model-lod worker", () => {
     temporaryRoots.push(input, output);
 
     expect(report.status).toBe("succeeded");
+    expect(report.schema).toBe("model-optimizer.lod-worker-report");
     expect(report.prototypes).toHaveLength(1);
     expect(report.prototypes[0]?.lods).toHaveLength(1);
 
@@ -85,7 +98,7 @@ describe("model-lod worker", () => {
 
   it("supports the compliance-only max-level 0 path", async () => {
     const input = await createCanonicalFixture();
-    const output = join(input, "..", "stage2-base");
+    const output = join(input, "..", "lod-base");
     const report = await runWorker({
       input,
       output,
@@ -108,7 +121,7 @@ describe("model-lod worker", () => {
 
   it("keeps a real LOD gap candidate base-only when its first level cannot reduce", async () => {
     const input = await createCanonicalFixture("lod-gap");
-    const output = join(input, "..", "stage2-gap-output");
+    const output = join(input, "..", "lod-gap-output");
     temporaryRoots.push(input, output);
     const report = await runWorker({ input, output, preset: "tower-v1", maxLevel: 2, json: false, verbose: false, resume: false, help: false, version: false });
     expect(report.status).toBe("succeeded");
@@ -121,7 +134,7 @@ describe("model-lod worker", () => {
 
   it("retains accepted levels and stops after a later quality failure", async () => {
     const input = await createCanonicalFixture();
-    const output = join(input, "..", "stage2-prefix-output");
+    const output = join(input, "..", "lod-prefix-output");
     temporaryRoots.push(input, output);
     const simplify = glb.simplifyGLB;
     const spy = vi.spyOn(glb, "simplifyGLB").mockImplementation(async (source, destination, levels) => {
@@ -144,7 +157,7 @@ describe("model-lod worker", () => {
 
   it("falls back to a scene-wide base-only result for unsupported or tiny geometry", async () => {
     const input = await createCanonicalFixture("line");
-    const output = join(input, "..", "stage2-line-fallback");
+    const output = join(input, "..", "lod-line-fallback");
     const report = await runWorker({
       input,
       output,
@@ -168,7 +181,7 @@ describe("model-lod worker", () => {
     await expect(readFile(join(output, "_build", "assets", "prototypes", "scene-relative", "fixture", "lod1.glb"))).rejects.toThrow();
 
     const tinyInput = await createCanonicalFixture("triangle");
-    const tinyOutput = join(tinyInput, "..", "stage2-tiny-fallback");
+    const tinyOutput = join(tinyInput, "..", "lod-tiny-fallback");
     const tinyReport = await runWorker({
       input: tinyInput,
       output: tinyOutput,
@@ -221,7 +234,7 @@ describe("model-lod worker", () => {
     expect(manifest.prototypes.find((p: {prototypeId:string}) => p.prototypeId === "prototype-line").status).toBe("base-only");
   });
 
-  it("rejects a modified source asset before writing stage 2", async () => {
+  it("rejects a modified source asset before writing LOD output", async () => {
     const input = await createCanonicalFixture(); temporaryRoots.push(input);
     await writeFile(join(input,"content/fixture.glb"),"tampered");
     await expect(loadInputSnapshot(input)).rejects.toThrow();

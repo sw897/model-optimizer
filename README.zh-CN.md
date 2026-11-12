@@ -1,151 +1,92 @@
 # Model Optimizer
 
-面向 GLB 和标准 3D Tiles 的离线优化工具，提供两个独立 CLI。运行环境为 Node.js ≥20.9.0，开发建议使用当前维护中的 Node.js LTS。
+面向 GLB 和标准 3D Tiles 的离线优化工具。几何缓冲采用 Meshopt 无损压缩，材质纹理采用 Basis Universal / KTX2 压缩；另提供基于规范原型资产生成 LOD 候选的 CLI。
 
-[English](README.md) · [Apache-2.0](LICENSE) · [贡献指南](CONTRIBUTING.md)
+[English](README.md) · [Apache-2.0](LICENSE) · [贡献指南](CONTRIBUTING.md) · [安全报告](SECURITY.md)
 
-当前 `0.3.3` 是本地准备版本，尚未公开发布。`private: true` 保留 npm 发布锁；下文的安装包均可在本地构建。
+## 状态与环境
 
-- `model-lod-worker`：读取 lod-input 的 `_build` 构建资料，用 glTF-Transform + MeshoptSimplifier 生成组件 LOD。
-- `model-opt-worker`：自动识别单个 GLB、传统模型目录或标准 `tileset.json` 资源图，用 Meshopt 无损缓冲压缩和 BasisU/KTX2 材质纹理压缩优化网络与 GPU 资源。
+当前 `0.4.0` 是尚未发布的本地准备版本，保留 `private: true` 禁止 npm 发布。运行需要 Node.js ≥20.9.0，开发建议使用维护中的 Node.js LTS。Windows 便携包仍有原生验收和第三方源码交付阻塞，详见[阻塞项记录](docs/release-blockers.md)。
 
+- `model-opt-worker`：接受单个 GLB、普通模型目录或标准 3D Tiles 目录。
+- `model-lod-worker`：接受符合[输入规范](docs/input-specification.md)的原型目录，需要 `_build/build-manifest.json`、文件摘要清单和基础原型 GLB。
+- 优化结果需要支持 `EXT_meshopt_compression` 与 `KHR_texture_basisu` 的解码环境。
 
-## 安装与打包
+## 构建与样例
 
-```bash
+```sh
 npm ci
 npm run build
-npm run lint
-npm test
-npm run package
-npm run test:package
-```
-
-发行包包含 dist、协议 schema、双语文档、许可证、样例生成器和工具链版本清单。npm tarball 不捆绑 Node.js 或 node_modules；安装时仍需获取依赖。完整依赖版本由源码的 package-lock.json 锁定，工具链清单描述直接运行依赖。
-
-本地安装：`npm install -g ./artifacts/model-optimizer-0.3.3.tgz`。安装包后通过两个 bin 命令运行；源码目录可用 `node dist/cli.js` 与 `node dist/opt-cli.js`。
-
-Windows x64 便携包可在 macOS、Linux 或 Windows 上使用 `npm run package:portable` 构建，需要 Node.js 和 Go。包内使用已审查的 CPU-only Release 编码器、锁定的 Windows Node.js 及目标平台原生依赖，排除旧 npm 编码器及其调试 DLL。用 `npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip` 检查实际 ZIP；Windows 构建机还会自动执行解压后冒烟检查，其他环境如实记录验证级别。详见 [Windows 构建与验证](docs/windows-portable.md) 和 [发行准备](docs/releasing.md)。解压后保留 app/ 与 runtime/，无需另装 Node.js、npm 或 Go。
-
-macOS/Linux 可先运行 `npm run prepare:wine` 准备本地 Docker 验证镜像，再使用 `npm run package:portable -- --wine-image model-optimizer-wine:local` 执行兼容性检查。ARM 主机使用锁定版本的 QEMU；结果标记为 Wine，原生 Windows 验收单独记录。
-
-## 可复现样例
-
-```bash
 npm run example
 node dist/opt-cli.js -i artifacts/example/model.glb -o artifacts/example/model-web.glb --json
 node dist/opt-cli.js -i artifacts/example/tileset -o artifacts/example/tileset-web --json
 node dist/cli.js -i artifacts/example/lod-input -o artifacts/example/lod --max-level 1 --json
 ```
 
-样例由程序生成几何和贴图，随项目按 Apache-2.0 授权，无需业务数据或外部模型。生成目标必须不存在；可用 `npm run example -- <新目录>` 指定其他路径。输入说明见 [examples/README.md](examples/README.md)。
+样例程序生成几何、纹理、元数据及所需摘要，无外部模型或业务数据，采用 Apache-2.0。目标目录必须不存在；再次运行可用 `npm run example -- <新目录>` 指定其他位置。详见[样例说明](examples/README.md)。
 
-## 单 GLB 与传统模型目录
+## 输入与输出
 
-```bash
-model-opt-worker -i ./models/sample.glb -o ./web/sample.glb --json
-model-opt-worker -i ./models -o ./models-web --json
+```sh
+model-opt-worker -i model.glb -o model-web.glb --json
+model-opt-worker -i models -o models-web --json
+model-opt-worker -i tileset -o tileset-web --json
+model-lod-worker -i lod-input -o lod-output --preset tower-v1 --max-level 2 --json
 ```
 
-`--input/-i` 与 `--output/-o` 决定输入、输出，输入形态自动识别：
+| 输入 | 输出 |
+| --- | --- |
+| 单个 GLB | 自包含 GLB，允许使用不同文件名 |
+| 根目录没有 `tileset.json` 的模型目录 | 递归优化 GLB，保留相对路径，其他普通文件原字节复制 |
+| 根目录含 `tileset.json` 的瓦片目录 | 按可达资源图生成完整优化目录，更新已声明的管理索引和摘要 |
+| 符合 LOD 输入规范的原型目录 | 基础场景、逐原型 LOD 候选、清单与报告 |
 
-| 输入 | 输出 | 定位资料与报告 |
-|---|---|---|
-| 单个 `.glb` 文件 | 自包含 `.glb` 文件，文件名可不同 | 仅写目标 GLB；`--json` 将报告输出到标准输出 |
-| 根目录没有 `tileset.json` 的传统模型目录 | 递归优化每个 GLB，保留全部相对路径和文件名 | 其他普通文件原字节复制，包括 `offset.json`；增加优化清单和报告 |
-| 根目录含 `tileset.json` 的标准瓦片目录 | 按可达资源图生成独立发布目录 | 更新运行资源、管理索引、优化清单和报告，详见下文 |
+全部数据要求集中在[输入规范](docs/input-specification.md)：包括路径与哈希、原型清单、`model_features_v2` 元数据，以及可选对象/组件索引。输入可由任意工具按规范生成。`0.4.0` 的标识属于格式变更；既有数据需转换标识并重算相关摘要，不提供旧标识别名。
 
+`--help` 列出各 CLI 参数。退出码 0 表示成功，1 表示失败。`--json` 将最终成功报告写入标准输出；错误及可用的失败报告写入标准错误。底层库可能另外输出诊断，目录输出中的报告文件可独立读取。
 
-优化固定采用 `web-v1`：几何缓冲无损 Meshopt 编码，材质纹理采用 BasisU/KTX2。不减面、不生成 LOD，不改坐标、节点变换或顶点/索引数值；纹理压缩不是像素无损。单文件输出将缓冲和纹理嵌入 GLB，不依赖额外资源文件。
+### 优化行为与限制
 
-输出 GLB 必须不存在；输出目录必须不存在或为空。目录输入输出不能相交，目录内不接受符号链接。已有 `asset.extras.modelOptimizer` 标记的 GLB 会被拒绝，重新优化应使用原始输入。
+- 固定使用 `web-v1`：保持几何数值、顶点/索引顺序、坐标变换和 feature 身份；纹理压缩有损。不减面，也不生成 LOD。
+- 单文件和普通目录中的 GLB 输出保持自包含；标准瓦片输出可在输出根目录内共享资源。
+- GLB 扩展名大小写不敏感；普通模型目录中的 `.gltf` 作为辅助文件复制。
+- 瓦片输入支持 external tileset、glTF/GLB、buffer、纹理、schema，以及 glTF data URI。远程 URI、循环引用、路径逃逸、符号链接及损坏范围会被拒绝。
+- 输出文件必须不存在；输出目录必须新建或为空，且不能与输入相交。已优化数据会被拒绝，应保留原始资产。
+- `b3dm`、`i3dm`、`pnts` 和 implicit tiling 展开不在已验证的支持范围内。
+- 元数据扩展直接保留并验证，不通过丢失未知扩展的模型重写流程重建。几何共享依照字节内容和编码布局归集，feature/property 纹理保留无损数据。
 
+### LOD 行为
 
-## 3D Tiles：基础模型无需 LOD
+预设为 `tower-v1`、`span-v1`、`base-only`。默认生成一级；`--max-level 0` 仅验证基础资产。每级独立从基础 GLB 化简并检查米制误差，同一原型质量失败后停止后续级别，保留连续成功前缀。首级失败或布局不支持时保留 base-only 并记录原因。
 
-```bash
-model-opt-worker --input ./line-a-build --output ./line-a-web
+输入要求使用规范原型，拒绝已装配的世界组件或 GPU 实例模型。支持的 part 布局保留属性表、part 身份及 primitive/材质边界；混合 part、共享 accessor、动画、缩放节点等布局保留 base-only。LOD 候选不改变基础 tileset 的层级或内容引用。
+
+输出包括 `lod-manifest.json`（`model-optimizer.lod-manifest` v3）、`lod-worker-report.json`、工具链清单和通过质量检查的 LOD GLB。清单绑定输入摘要，记录输出摘要、工具版本与误差。中断后可用 `--resume` 复用验证通过的 `.lod-work` 目录。
+
+## 本地打包与验证
+
+```sh
+npm run lint
+npm test
+npm run audit:dependencies
+npm run package
+npm run test:package
+npm install -g ./artifacts/model-optimizer-0.4.0.tgz
 ```
 
+`package` 在忽略的 `artifacts/` 中生成 tarball 和 SHA-256，不上传或发布。包内含编译后的 CLI、schema、双语文档、样例及许可证；Node.js 和依赖需另行安装。源码的 `package-lock.json` 锁定完整依赖图，`toolchain.lock.json` 记录直接运行依赖；tarball 安装时仍会解析间接依赖。
 
-## 构建 LOD
+`test:package` 在临时目录安装真实 tarball，执行双 CLI、退出码、GLB/目录/瓦片/LOD 和纹理编码检查。CI 配置覆盖 Linux、macOS 和 Windows；配置存在不代表远端检查已执行。
 
-```bash
-model-lod-worker --input ./line-a-build --output ./line-a-lod --preset tower-v1 --max-level 2
-model-opt-worker --input ./line-a-published --output ./line-a-web
+Windows x64 便携包可跨平台组装，使用经审查的 CPU Release 编码器、锁定的 Windows Node.js 和目标平台依赖：
+
+```sh
+npm run package:portable
+npm run check:portable -- artifacts/model-optimizer-0.4.0-windows-x64.zip
 ```
 
-`--max-level 0` 仅校验基础资产。默认一级候选；可用 tower-v1、span-v1、base-only preset。每个级别从基础 GLB 独立化简。同一原型遇到质量失败后停止后续级别，仅保留连续成功前缀；首级失败则保持 base-only，其他原型不受影响。线/点图元保持 base-only，不创建原文件复制品作为 LOD。
+Windows 构建机自动执行解压后的冒烟检查。macOS/Linux 可先运行 `npm run prepare:wine`，再用 `npm run package:portable -- --wine-image model-optimizer-wine:local` 补充兼容验证；ARM 主机使用锁定的 QEMU。Wine 结果单独标记，原生 Windows 验收仍需实际完成。详见 [Windows 构建与验证](docs/windows-portable.md)及[发行准备](docs/releasing.md)。
 
-输入必须是 canonical 原型：世界组件表或 GPU 实例装配模型被拒绝。带 part feature 的原型支持在单个 primitive 对应单一 part 时减面：保留属性表、part 身份和 primitive/材质边界，重映射仍被使用的顶点属性，每个 primitive 至少保留一个三角形。使用 Meshopt 米制误差门槛；共享 primitive accessor、混合 part、动画、缩放节点、压缩或其他不支持的布局保留 base-only，并记录原因，不删除身份元数据。
+## 许可证
 
-
-```text
-_build/assets/prototypes/<物理来源>/<模型>.glb
-_build/assets/prototypes/<物理来源>/<模型>/lod1.glb
-_build/assets/prototypes/<物理来源>/<模型>/lod2.glb
-lod-manifest.json
-lod-worker-report.json
-toolchain.lock.json
-```
-
-## 阶段 1 / 2 契约
-
-`_build/build-manifest.json` 使用 `model-optimizer.lod-input` v1：
-
-```json
-{
-  "schema": "model-optimizer.lod-input",
-  "version": 1,
-  "sceneId": "line-a",
-  "sourceHash": "<source hash>",
-  "prototypeManifest": "_build/prototypes.json",
-  "instanceManifest": "_build/instances.jsonl",
-  "objectIndex": "objects/index.json",
-  "layout": "_build/spatial-layout.json",
-  "files": [{"path": "tileset.json", "sha256": "<sha256>"}]
-}
-```
-
-全部路径相对输入根。files 覆盖公开运行资源、构建清单、基础 GLB；不包含 build-manifest 自身及非权威报告。worker 验证资源闭包与每个文件 hash，拒绝路径逃逸和外部 symlink。
-
-prototype 数组保留 prototypeId、prototypeKey、name、assetKey、sourcePath、role；assetPath 为 `_build/assets/prototypes/<assetKey>`，baseGLB 为同名 `.glb`，初始 lods 为空。
-
-阶段 2 输出 `model-optimizer.lod-manifest` v3，使用 baseBuildManifestHash、basePrototypeManifestHash、sceneId 绑定输入；每个原型含 status、可选 reason、baseSha256 和真实 lods。LOD 包含路径、SHA-256、来源 SHA-256、算法/工具版本及米制误差。schema 见 schemas/lod-manifest.schema.json。
-
-## 标准资源图优化
-
-对标准瓦片目录，优化器递归读取 external tileset、glTF/GLB、buffer、纹理和 schema。支持输入根内相对 URI 与 glTF data URI；远程资源应先归集。循环引用、损坏范围、外部路径、冲突输出在发布前失败。
-
-共享几何按源缓冲内容哈希归集，不因文件名不同重复编码；区间按原始字节及编码布局去重，accessor 的名称、extras 等语义信息仍分别保留。输出 buffer 使用内容哈希路径，相同压缩区间也共享虚拟解码空间。预先索引 accessor 和索引视图，避免对每个 bufferView 反复扫描整个模型。保持顶点、索引、POSITION、实例和 feature 数据的原始数值/顺序，使用 meshoptimizer bufferView 编码，并逐字节解码回验。
-
-资源归集不把不同来源缓冲中仅部分相同的数据集中成全场景大文件，避免扩大单个 tile 的下载范围。GLB 封装会合并完全相同的物理缓冲，但仍是每个 GLB 自包含，不引入跨 GLB 外部依赖。不同烘焙坐标不会当作重复数据合并，去重不等于减面或更有损的几何压缩。
-
-纹理按源内容、颜色用途、编码参数缓存。底色/自发光使用颜色编码，法线/数据使用线性 UASTC。相同图像同时用于颜色和数据时输出不同变体。转换 WebP/AVIF 来源时同步清理已替换的 codec 引用与声明。feature-ID/property 纹理保留原始无损字节及所需 codec，材质纹理独立优化，避免改变对象 ID。
-
-输入 glTF 的 JSON 扩展直接保留，包括 EXT_instance_features 和 EXT_structural_metadata；glTF-Transform 用于解码检查，不通过不了解实例 feature 的读写循环重建这些元数据。
-
-
-
-标准瓦片目录的优化输出为 publication：
-
-- 仅保留标准运行资源及发布管理资料，不携带 `_build` 或 LOD hand-off。
-- 继承 sceneId/objectKey/componentId，重写 catalog、objects、components 中的内容路径及 release 引用；保留 bounds 与真实 LOD level。
-- 从入口 catalog 发现公开组件分片，校验 root→catalog→index→shard 摘要链；优化后按对象边界及 4 MiB 预算重新分片，运行时 JSON 使用紧凑序列化，更新摘要链和 32 位 releaseId，不从 `_build` 补查发布索引。
-- 重新生成资源 hash、optimization-manifest v3 和报告。
-- 目录输出新建、通过校验后原子提交；失败不覆盖输入或已有发布成果。
-- 已优化输入应从原始构建/发布目录重新加工。
-
-## 验证
-
-`npm run lint`、`npm test`、`npm run build` 覆盖：
-
-- 标准构建 manifest、物理命名、输入 hash、确定性 LOD；
-- 不同原型各自的 LOD/base-only 和已有 Draco/Meshopt 解码；
-- 两 tile 共享几何、不同实例 feature、POSITION 字节不变；
-- 同图像不同色彩用途、无损 feature 纹理；
-- metadata 身份、管理路径、资源闭包、循环和 symlink 安全；
-- 原子输出失败与可重复优化结果。
-
-
-本项目代码和生成式样例采用 [Apache-2.0](LICENSE)；第三方依赖适用各自许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。CI 配置覆盖 macOS、Linux 和 Windows；本地通过的检查不代表其他平台已完成验证。
+项目代码与生成式样例采用 [Apache-2.0](LICENSE)。第三方依赖保留各自许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [NOTICE](NOTICE)。

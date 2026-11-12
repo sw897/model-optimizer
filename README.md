@@ -1,15 +1,15 @@
 # Model Optimizer
 
-Offline optimization of GLB models and standard 3D Tiles datasets. Geometry buffers use lossless Meshopt compression; material textures use Basis Universal / KTX2 compression. An additional worker generates LOD candidates for the LOD input protocol.
+Offline optimization of GLB models and standard 3D Tiles datasets. Geometry buffers use lossless Meshopt compression; material textures use Basis Universal / KTX2 compression. A separate worker generates LOD candidates from canonical prototype assets.
 
 [简体中文](README.zh-CN.md) · [Apache-2.0](LICENSE) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Status and requirements
 
-Version 0.3.3 is an unreleased local preparation build. npm publication remains disabled with `private: true`. The commands below build and install local artifacts.
+Version 0.4.0 is an unreleased local preparation build. npm publication remains disabled with `private: true`. The commands below build and install local artifacts.
 
 - Runtime: Node.js >=20.9.0. Use a maintained Node.js LTS for development.
-- `model-lod-worker` requires a canonical LOD input directory. It does not accept an arbitrary standalone GLB. See [the model input contract](docs/input-specification.md).
+- `model-lod-worker` requires a canonical LOD input directory. It does not accept an arbitrary standalone GLB. See [the input specification](docs/input-specification.md).
 - Decoders must support `EXT_meshopt_compression` and `KHR_texture_basisu` for optimized assets.
 
 ## Build and try
@@ -39,7 +39,7 @@ model-lod-worker -i lod-input -o scene-lod --preset tower-v1 --max-level 2 --jso
 | One GLB | One self-contained GLB; the filename may change |
 | Directory without a root `tileset.json` | Optimized GLBs with original relative paths; auxiliary files are copied byte for byte |
 | Directory with a root `tileset.json` | An independent optimized publication containing reachable resources and declared management indexes |
-| model input build directory, through the LOD worker | Base scene, per-prototype LOD candidates, manifest and report |
+| Canonical LOD input directory, through the LOD worker | Base scene, per-prototype LOD candidates, manifest and report |
 
 `--help` documents each command. Exit code 0 means success; 1 means failure. `--json` writes the final success report to stdout; CLI failures and a failure report, when available, go to stderr. Codec/library diagnostics may also be emitted. Directory outputs contain report files that can be read independently of those diagnostics.
 
@@ -67,14 +67,14 @@ npm run test:package
 `npm run package` writes a tarball and SHA-256 checksums to `artifacts/`; it does not upload or publish anything. A local installation is:
 
 ```sh
-npm install -g ./artifacts/model-optimizer-0.3.3.tgz
+npm install -g ./artifacts/model-optimizer-0.4.0.tgz
 ```
 
 The tarball contains compiled CLI code, schemas, bilingual documentation, examples and license notices. Node.js and dependencies are installed separately. `package-lock.json` pins the source checkout's dependency graph; `toolchain.lock.json` records direct runtime versions.
 
 The package smoke check installs the tarball in a temporary directory, exercises both CLIs and processes generated examples. CI is configured for Linux, macOS and Windows with maintained Node.js LTS releases. CI configuration is not evidence that those remote checks have run.
 
-Windows x64 portable builds use a reviewed CPU-only Release encoder, a pinned Windows Node.js runtime and target-platform production dependencies. Build locally with `npm run package:portable`; inspect the extracted artifact with `npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip`. Native Windows builds also run the bundled smoke check automatically; other hosts record their actual validation level. See [Windows build and validation](docs/windows-portable.md) and [release preparation](docs/releasing.md).
+Windows x64 portable builds use a reviewed CPU-only Release encoder, a pinned Windows Node.js runtime and target-platform production dependencies. Build locally with `npm run package:portable`; inspect the extracted artifact with `npm run check:portable -- artifacts/model-optimizer-0.4.0-windows-x64.zip`. Native Windows builds also run the bundled smoke check automatically; other hosts record their actual validation level. See [Windows build and validation](docs/windows-portable.md) and [release preparation](docs/releasing.md).
 
 For supplementary macOS/Linux compatibility checks, run `npm run prepare:wine`, then `npm run package:portable -- --wine-image model-optimizer-wine:local`. ARM Docker hosts use the pinned QEMU runner. These results are labeled Wine; native Windows verification is recorded separately.
 

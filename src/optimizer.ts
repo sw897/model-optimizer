@@ -94,7 +94,7 @@ async function loadOptimizationInput(input: string): Promise<OptimizationInput> 
     return { kind: "glb-file", graph, entries, resources: [...graph.files.keys()], auxiliary: [], directories: [] };
   }
   if (!info.isDirectory()) throw new Error("input must be a GLB file or model directory");
-  if (await pathExists(join(input, "lod-manifest.json"))) throw new Error("staged LOD assets must be integrated by runtime assembly before optimization");
+  if (await pathExists(join(input, "lod-manifest.json"))) throw new Error("LOD candidate directories are not supported optimizer inputs; provide a tileset directory with its final content references");
   if (await pathExists(join(input, "optimization-manifest.json"))) throw new Error("input is already optimized; use the original build or publication");
   if (await pathExists(join(input, "tileset.json"))) {
     const graph = await loadResourceGraph(input); await includeManagement(graph); assertUnoptimizedModels(graph, false);

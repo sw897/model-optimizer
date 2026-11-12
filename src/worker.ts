@@ -45,7 +45,7 @@ export async function runWorker(options: CLIOptions): Promise<WorkerReport> {
 
   const snapshot = await loadInputSnapshot(inputRoot);
   await prepareOutputRoot(outputRoot);
-  const workRoot = `${outputRoot}.stage2-work`;
+  const workRoot = `${outputRoot}.lod-work`;
   const jobKey = await makeJobKey(snapshot, preset, options.maxLevel);
   const workerBinarySha256 = await sha256File(fileURLToPath(import.meta.url));
   const state = await prepareWorkRoot(workRoot, options.resume, jobKey, snapshot, preset, options.maxLevel);

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Standard tileset optimization manifest v3",
+  "title": "Optimization output manifest v3",
   "type": "object",
   "required": [
     "schema",
@@ -43,5 +43,6 @@
     "toolchain": {
       "type": "object"
     }
-  }
+  },
+  "$id": "urn:model-optimizer:schemas:optimization-manifest:3"
 }

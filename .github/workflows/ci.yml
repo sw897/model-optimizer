@@ -57,4 +57,4 @@ jobs:
       # On Windows this also runs the extracted ZIP's smoke check using the
       # bundled runtime, including empty PATH and the native Sharp DLLs.
       - run: npm run package:portable
-      - run: npm run check:portable -- artifacts/model-optimizer-0.3.3-windows-x64.zip
+      - run: npm run check:portable -- artifacts/model-optimizer-0.4.0-windows-x64.zip

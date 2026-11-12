@@ -64,6 +64,16 @@ async function fixture(packed = false): Promise<{ root: string; input: string; p
 }
 
 describe("component publication integrity", () => {
+  it.each([false, true])("enforces required identity fields in model_features_v2 (part=%s)", async part => {
+    const root = await mkdtemp(join(tmpdir(), "feature-contract-")); roots.push(root);
+    const fields: Record<string, string> = part ? { partId: "part-1", displayName: "Part", sourceName: "part.obj" } : { ...component };
+    const missing = part ? "partId" : "componentId";
+    delete fields[missing];
+    await model(root, "model.gltf", fields, part);
+    const graph = await loadGLTFResourceGraph(root, ["model.gltf"]);
+    await expect(validateFeatureMetadata(graph)).rejects.toThrow(`missing model feature metadata ${missing}`);
+  });
+
   it.each([false, true])("rewrites the hash chain and complete component references (packed=%s)", async packed => {
     const { root, input, content } = await fixture(packed), output = join(root, "web");
     const report = await runOptimizer(options(input, output));

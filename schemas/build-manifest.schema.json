@@ -1,26 +1,70 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "lod-input processing manifest v1",
+  "title": "Canonical LOD input manifest v1",
   "type": "object",
-  "required": ["schema", "version", "sceneId", "sourceHash", "prototypeManifest", "instanceManifest", "objectIndex", "layout", "files"],
+  "required": [
+    "schema",
+    "version",
+    "sceneId",
+    "sourceHash",
+    "prototypeManifest",
+    "instanceManifest",
+    "objectIndex",
+    "layout",
+    "files"
+  ],
   "properties": {
-    "schema": {"const": "model-optimizer.lod-input"},
-    "version": {"const": 1},
-    "sceneId": {"type": "string", "minLength": 1},
-    "sourceHash": {"type": "string", "minLength": 1},
-    "prototypeManifest": {"type": "string", "minLength": 1},
-    "instanceManifest": {"type": "string", "minLength": 1},
-    "objectIndex": {"type": "string", "minLength": 1},
-    "layout": {"type": "string", "minLength": 1},
+    "schema": {
+      "const": "model-optimizer.lod-input"
+    },
+    "version": {
+      "const": 1
+    },
+    "sceneId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceHash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prototypeManifest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instanceManifest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objectIndex": {
+      "type": "string",
+      "minLength": 1
+    },
+    "layout": {
+      "type": "string",
+      "minLength": 1
+    },
     "files": {
-      "type": "array", "minItems": 1,
+      "type": "array",
+      "minItems": 1,
       "items": {
-        "type": "object", "required": ["path", "sha256"],
+        "type": "object",
+        "required": [
+          "path",
+          "sha256"
+        ],
         "properties": {
-          "path": {"type": "string", "minLength": 1},
-          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         }
       }
     }
-  }
+  },
+  "$id": "urn:model-optimizer:schemas:lod-input:1"
 }

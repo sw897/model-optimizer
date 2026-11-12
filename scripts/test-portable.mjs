@@ -42,10 +42,12 @@ try {
   const output = join(example, "输出.glb");
   const report = JSON.parse(cli("model-opt-worker", ["-i", join(example, "model.glb"), "-o", output, "--json"]).stdout);
   assert.equal(report.status, "succeeded");
+  assert.equal(report.schema, "model-optimizer.optimization-report");
   assert.ok(report.textureEncoder.includes(manifest.encoder.sha256));
   const bytes = await readFile(output);
   const parse = value => ({ json: JSON.parse(value.subarray(20, 20 + value.readUInt32LE(12)).toString("utf8")), binary: value.subarray(28 + value.readUInt32LE(12)) });
   const optimized = parse(bytes), base = parse(original);
+  assert.equal(optimized.json.asset.extras.modelOptimizer.schema, "model-optimizer.asset-metadata");
   for (const extension of ["EXT_meshopt_compression", "KHR_texture_basisu"]) assert.ok(optimized.json.extensionsRequired.includes(extension));
   assert.ok(optimized.json.images.every(image => image.mimeType === "image/ktx2" && !image.uri));
   assert.equal(report.textureResources, 3, "Exercise color, normal and data encoding paths");
@@ -82,12 +84,17 @@ try {
   assert.deepEqual(await readFile(join(example, "models-web/offset.json")), await readFile(join(example, "models/offset.json")));
   const tiles = JSON.parse(cli("model-opt-worker", ["-i", join(example, "tileset"), "-o", join(example, "tileset-web"), "--json"]).stdout);
   assert.equal(tiles.inputKind, "tileset");
+  const optimizationManifest = JSON.parse(await readFile(join(example, "tileset-web/optimization-manifest.json"), "utf8"));
+  assert.equal(optimizationManifest.schema, "model-optimizer.optimization-manifest");
   cli("model-lod-worker", ["-i", join(example, "lod-input"), "-o", join(example, "lod"), "--max-level", "1", "--json"]);
   const lod = JSON.parse(await readFile(join(example, "lod/lod-worker-report.json"), "utf8"));
   assert.equal(lod.status, "succeeded");
+  assert.equal(lod.schema, "model-optimizer.lod-worker-report");
+  const lodManifest = JSON.parse(await readFile(join(example, "lod/lod-manifest.json"), "utf8"));
+  assert.equal(lodManifest.schema, "model-optimizer.lod-manifest");
   assert.equal(lod.prototypes[0].status, "succeeded");
   assert.equal(lod.prototypes[0].lods.length, 1);
-  checks.push("model directory and auxiliary file preservation; standard tileset; real model input LOD generation");
+  checks.push("model directory and auxiliary file preservation; standard tileset; specification-compliant LOD generation and schema identities");
   const goodEncoder = await readFile(encoder);
   try {
     const damaged = Buffer.from(goodEncoder); damaged[damaged.length - 1] ^= 1;

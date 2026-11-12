@@ -51,7 +51,7 @@ describe("automatic model optimization inputs", () => {
     const output = join(root, "directory-output");
     const report = await runOptimizer(options(input, output));
     expect(report.inputKind).toBe("glb-directory");
-    expect(report.assets.map(asset => asset.path)).toEqual(["sample.glb", "models/sample.GLB"]);
+    expect(report.assets.map(asset => asset.path)).toEqual(["models/sample.GLB", "sample.glb"]);
     expect(await readdir(join(output, "empty"))).toEqual([]);
     for (const file of ["offset.json", "nested/settings.json", "nested/reference.gltf"]) expect(await readFile(join(output, file))).toEqual(await readFile(join(input, file)));
     for (const asset of report.assets) expect(parseGLB(await readFile(join(output, asset.path)), asset.path).json.extensionsRequired).toContain("EXT_meshopt_compression");

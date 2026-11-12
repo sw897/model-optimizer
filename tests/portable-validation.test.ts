@@ -30,7 +30,7 @@ async function fixture() {
   const json = (path: string, data: unknown) => put(path, JSON.stringify(data));
   for (const path of ["model-opt-worker.exe", "model-lod-worker.exe", "runtime/node.exe", "app/vendor/basisu/windows-x64/basisu.exe"]) await put(path, executable());
   for (const path of ["app/dist/opt-cli.js", "app/dist/cli.js", "app/examples/generate.mjs", "app/scripts/test-portable.mjs", "app/scripts/verify-portable.mjs", "app/scripts/pe.mjs", "app/scripts/portable-integrity.mjs", "app/scripts/portable-licenses.mjs", "app/scripts/portable-redistribution.mjs", "app/LICENSE", "app/NOTICE", "app/THIRD_PARTY_NOTICES.md", "runtime/LICENSE", "app/vendor/basisu/windows-x64/licenses/Basis-Universal-Apache-2.0.txt", "app/vendor/licenses/GPL-3.0.txt", "app/vendor/licenses/LGPL-3.0.txt", "app/node_modules/synthetic/LICENSE"]) await put(path, "synthetic fixture\n");
-  await json("app/package.json", { version: "0.3.3", dependencies: { synthetic: "1.0.0" } });
+  await json("app/package.json", { version: "0.4.0", dependencies: { synthetic: "1.0.0" } });
   await json("app/node_modules/synthetic/package.json", { name: "synthetic", version: "1.0.0", license: "MIT" });
   const encoder = await fileRecord(root, "app/vendor/basisu/windows-x64/basisu.exe");
   await json("app/native-tools.lock.json", { node: { version: "24.22.3" }, basisu: { "windows-x64": { path: "vendor/basisu/windows-x64/basisu.exe", sha256: encoder.sha256 } } });
@@ -39,7 +39,7 @@ async function fixture() {
   const go = await collectGoLicense(root, toolchain, "go version fixture");
   const packages = await collectPortableNotices(root, go);
   const manifest = {
-    schema: "model-optimizer.windows-portable", version: 2, packageVersion: "0.3.3",
+    schema: "model-optimizer.windows-portable", version: 2, packageVersion: "0.4.0",
     node: { version: "24.22.3", binarySha256: (await fileRecord(root, "runtime/node.exe")).sha256 },
     encoder: { sha256: encoder.sha256 }, launcher: { compiler: go.version },
     nativeFiles: await inspectWindowsTree(root), applicationFiles: await inventoryTree(root, "app"),

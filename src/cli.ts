@@ -71,20 +71,20 @@ export function parseCLI(argv: string[]): CLIOptions {
 export function helpText(): string {
   return `model-lod-worker ${VERSION}
 
-Stage-2 LOD worker for standard lod-input output and _build/build-manifest.json.
+LOD generator for canonical prototype directories conforming to docs/input-specification.md.
 
 Usage:
-  model-lod-worker --input <lod-input-root> --output <lod-stage-root> [options]
+  model-lod-worker --input <input-root> --output <output-root> [options]
 
 Options:
-  -i, --input <path>       Stage-1 lod-input directory (required)
-  -o, --output <path>      Empty stage-2 output root (required)
+  -i, --input <path>       Directory conforming to the LOD input specification (required)
+  -o, --output <path>      New or empty output directory (required)
       --preset <name>      tower-v1, span-v1, or base-only (default: tower-v1)
       --max-level <N>      Highest LOD level to generate (default: 1; 0 validates the base scene)
       --report <path>      Report path relative to output root (default: lod-worker-report.json)
       --json               Print the final report as JSON
   -v, --verbose            Print per-prototype progress
-      --resume             Reuse a preserved stage-2 work directory after interruption
+      --resume             Reuse a preserved LOD work directory after interruption
   -h, --help               Show this help
       --version            Show the version
 `;
