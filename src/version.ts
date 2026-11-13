@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 const metadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   version: string;
   dependencies: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 };
 
 export const VERSION = metadata.version;
-export const DEPENDENCIES = metadata.dependencies;
+export const DEPENDENCIES = { ...metadata.dependencies, ...metadata.optionalDependencies };

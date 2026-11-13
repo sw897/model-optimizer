@@ -13,7 +13,7 @@ The project npm tarball does not bundle `node_modules` or Node.js. Dependencies 
 | `@gltf-transform/functions` | 4.5.0 | [MIT, glTF Transform](https://github.com/donmccurdy/glTF-Transform/blob/v4.5.0/LICENSE.md) |
 | `meshoptimizer` | 1.2.0 | [MIT](https://github.com/zeux/meshoptimizer/blob/v1.2/LICENSE.md) |
 | `draco3dgltf` | 1.5.7 | [Apache-2.0, Draco](https://github.com/google/draco/blob/1.5.7/LICENSE) |
-| `basisu` npm wrapper | 1.16.3 | Declared ISC in [package metadata](https://github.com/HacksawStudios/basisu/blob/master/package.json) |
+| `basisu` npm wrapper (optional; macOS/Linux encoder binaries) | 1.16.3 | Declared ISC in [package metadata](https://github.com/HacksawStudios/basisu/blob/master/package.json) |
 | Basis Universal encoder | 1.16.3 | [Apache-2.0](https://github.com/BinomialLLC/basis_universal/blob/1.16.3/LICENSE); audit embedded third-party components for the actual binary |
 | `sharp` | 0.35.5 | [Apache-2.0](https://github.com/lovell/sharp/blob/v0.35.5/LICENSE) |
 

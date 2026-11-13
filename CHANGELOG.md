@@ -4,6 +4,8 @@
 
 ## [Unreleased] - 0.4.0
 
+- 补齐 npm 10 / Node.js 22 安装所需的可选 esbuild peer 依赖锁定记录。
+- 将提供 macOS/Linux 编码器的 npm 包装器列为可选依赖，Windows 使用随包 Release 编码器；安装包冒烟验证覆盖移除 `cpu-features` 后的完整压缩流程。
 - 使用无命名空间的 `model-optimizer` 包名，输入要求集中在独立输入规范中。
 - **格式变更：**采用 `model-optimizer.*` 清单标识、`model_features_v2` 元数据及 `model_components` / `prototype_parts` 类；既有输入需按规范转换标识并重新计算文件摘要。
 - LOD 中断恢复目录采用 `.lod-work` 后缀；此前版本的工作目录需重新生成。

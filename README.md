@@ -9,6 +9,7 @@ Offline optimization of GLB models and standard 3D Tiles datasets. Geometry buff
 Version 0.4.0 is an unreleased local preparation build. npm publication remains disabled with `private: true`. The commands below build and install local artifacts.
 
 - Runtime: Node.js >=20.9.0. Use a maintained Node.js LTS for development.
+- macOS/Linux texture encoding requires the optional `basisu` package and its platform binaries. Windows uses the reviewed Release encoder bundled with this project; failure to build the npm wrapper's CPU detector does not block installation.
 - `model-lod-worker` requires a canonical LOD input directory. It does not accept an arbitrary standalone GLB. See [the input specification](docs/input-specification.md).
 - Decoders must support `EXT_meshopt_compression` and `KHR_texture_basisu` for optimized assets.
 

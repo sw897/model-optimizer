@@ -9,6 +9,7 @@
 当前 `0.4.0` 是尚未发布的本地准备版本，保留 `private: true` 禁止 npm 发布。运行需要 Node.js ≥20.9.0，开发建议使用维护中的 Node.js LTS。Windows 便携包仍有原生验收和第三方源码交付阻塞，详见[阻塞项记录](docs/release-blockers.md)。
 
 - `model-opt-worker`：接受单个 GLB、普通模型目录或标准 3D Tiles 目录。
+- macOS/Linux 纹理编码需要可选依赖 `basisu` 提供的平台二进制；Windows 使用随包的 Release 编码器，npm 包装器的 CPU 探测模块构建失败不会阻止安装。
 - `model-lod-worker`：接受符合[输入规范](docs/input-specification.md)的原型目录，需要 `_build/build-manifest.json`、文件摘要清单和基础原型 GLB。
 - 优化结果需要支持 `EXT_meshopt_compression` 与 `KHR_texture_basisu` 的解码环境。
 

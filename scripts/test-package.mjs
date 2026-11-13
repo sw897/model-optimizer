@@ -24,6 +24,9 @@ const run = (entry, args, expected = 0) => {
 const cli = (name, args, expected = 0) => run(npmCLI, ["exec", "--offline", "--", name, ...args], expected);
 try {
   run(npmCLI, ["install", "--prefix", scratch, "--no-audit", "--no-fund", "--save-exact", tarball]);
+  // Both CLIs select encoder binaries directly. The npm wrapper's native CPU
+  // detector is unnecessary, including when its optional Windows build fails.
+  await rm(join(scratch, "node_modules", "cpu-features"), { recursive: true, force: true });
   const installed = join(scratch, "node_modules", ...metadata.name.split("/"));
   for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "SECURITY.md", "docs/input-specification.md", "docs/releasing.md", "docs/windows-portable.md", "docs/windows-native-redistribution.md", "docs/release-blockers.md", "native-tools.lock.json", "vendor/basisu/windows-x64/basisu.exe", "vendor/redistribution/windows-x64.json", "toolchain.lock.json"]) {
     assert.deepEqual(await readFile(join(installed, file)), await readFile(join(root, file)), `Missing or stale packaged file: ${file}`);
@@ -65,7 +68,7 @@ try {
   assert.equal(lodManifest.schema, "model-optimizer.lod-manifest");
   assert.equal(lod.prototypes[0].status, "succeeded");
   assert.equal(lod.prototypes[0].lods.length, 1);
-  console.log(`Installed-package smoke check passed: both bins, exit codes, GLB/directory/tileset/LOD, Meshopt/KTX2, notices and Unicode/spaced paths (${metadata.version}).`);
+  console.log(`Installed-package smoke check passed without cpu-features: both bins, exit codes, GLB/directory/tileset/LOD, Meshopt/KTX2, notices and Unicode/spaced paths (${metadata.version}).`);
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }
